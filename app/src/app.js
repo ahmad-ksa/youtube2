@@ -23,10 +23,6 @@ const NAV = [
   ['trendSaudi', '💚', 'الترند السعودي'],
   ['exploreGulf', '🌊', 'استكشف الخليج'],
   ['trendGulf', '⛵', 'ترند الخليج'],
-  ['subs', '📺', 'الاشتراكات'],
-  ['channels', '👥', 'القنوات'],
-  ['history', '🕘', 'السجل'],
-  ['library', '📚', 'المكتبة'],
   ['arabMusic', '🎶', 'الموسيقى العربية'],
   ['worldMusic', '🎸', 'الموسيقى الأجنبية'],
   ['trendMusic', '🎧', 'تريند الأغاني العالمي'],
@@ -38,7 +34,12 @@ const NAV = [
   ['live', '🔴', 'مباشر'],
   ['refresh', '🔄', 'تحديث'],
   ['settings', '⚙', 'الإعدادات'],
-  ['account', '👤', 'الحساب']
+  ['account', '👤', 'الحساب'],
+  // rarely used: kept at the very end
+  ['subs', '📺', 'الاشتراكات'],
+  ['channels', '👥', 'القنوات'],
+  ['history', '🕘', 'السجل'],
+  ['library', '📚', 'المكتبة']
 ];
 
 export class App {
