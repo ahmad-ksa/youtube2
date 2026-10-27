@@ -225,15 +225,15 @@ class YT {
     return out;
   }
 
-  /** Favourites: recent uploads of every hearted channel in one list, newest first across channels. */
+  /** Favourites: the newest video of each hearted channel (one per channel), sorted newest first across channels. */
   async favorites() {
-    const out = await this.uploadsOf(favorites.list(), { per: 4, days: 45 });
+    const out = await this.uploadsOf(favorites.list(), { per: 1, days: 3650 });
     return { shelves: [{ title: '', items: out }], items: out, continuation: null };
   }
 
   /**
    * الجديد: recent uploads of subscriptions (when signed in) and of channels the user watched, in ONE list
-   * sorted by publish time, newest first across all channels (up to 3 per channel, last 30 days).
+   * sorted by publish time, newest first across all channels (the newest video of each channel).
    */
   async latest() {
     const seen = new Set(); const out = [];
@@ -246,14 +246,14 @@ class YT {
         for (const it of r.items) {
           if (it.type !== 'video' || it.live || it.short) continue;
           const k = it.channelId || it.sub; const n = perCh.get(k) || 0;
-          if (n >= 3) continue;
+          if (n >= 1) continue;
           perCh.set(k, n + 1); if (it.channelId) subsIds.add(it.channelId);
           push({ ...it, age: itemAge(it) });
         }
       } catch (e) { console.warn('[latest] subs', e?.message); }
     }
     const watched = history.channels().filter((c) => !subsIds.has(c.channelId)).slice(0, 25);
-    for (const it of await this.uploadsOf(watched, { per: 3, days: 30 })) push(it);
+    for (const it of await this.uploadsOf(watched, { per: 1, days: 3650 })) push(it);
     out.sort((a, b) => a.age - b.age);
     return { shelves: [{ title: '', items: out }], items: out, continuation: null };
   }
