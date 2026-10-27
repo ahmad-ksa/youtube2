@@ -1,0 +1,30 @@
+name: playtest
+# Real playback probe in Chrome against YouTube. Runs on pushes to ci/* branches (never releases anything).
+on:
+  push:
+    branches: ['ci/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci || npm install
+        working-directory: app
+      - run: node build.mjs
+        working-directory: app
+      - run: npm i --no-save playwright@1.48.2 && npx playwright install chrome
+      - run: node tools/playtest.cjs
+        env: { CHANNEL: chrome }
+      - name: publish results to branch playtest-results
+        if: always()
+        run: |
+          mkdir -p /tmp/res && cp playtest.log shot*.png /tmp/res/ 2>/dev/null || true
+          echo "${{ github.sha }}" > /tmp/res/commit.txt
+          git config user.name ci && git config user.email ci@users.noreply.github.com
+          git checkout --orphan playtest-results && git rm -rqf . && cp /tmp/res/* . && git add -A && git commit -qm "playtest ${{ github.run_id }}" && git push -f origin playtest-results
