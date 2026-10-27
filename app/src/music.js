@@ -1,18 +1,28 @@
-// الموسيقى العربية: from each Arab singer's channel, the newest song (video) and the newest album, all in ONE
-// list sorted by release time, newest first. Singers = a fixed list of well-known names + channels found
-// through this week's new Arabic songs. Exact times come from RSS (channel uploads and album playlists).
+// Music pages (الموسيقى العربية / الموسيقى الأجنبية): from each singer's channel, the newest song (video) and
+// the newest album, all in ONE list sorted by release time, newest first. Singers = a fixed list of well-known
+// names + channels found through this week's new songs. Exact times come from RSS (channel uploads and album
+// playlists).
 import { yt, itemAge, relTime } from './yt.js';
 import { extract } from './extract.js';
+import { isAdult } from './discover.js';
 
-const ARTISTS = [
+const ARAB_ARTISTS = [
   'محمد عبده', 'عبدالمجيد عبدالله', 'راشد الماجد', 'رابح صقر', 'ماجد المهندس', 'حسين الجسمي', 'أصالة', 'أحلام',
   'نوال الكويتية', 'بلقيس', 'داليا مبارك', 'عايض', 'فؤاد عبدالواحد', 'محمد عساف', 'عمرو دياب', 'تامر حسني',
   'محمد حماقي', 'شيرين عبد الوهاب', 'أنغام', 'ويجز', 'مروان موسى', 'نانسي عجرم', 'إليسا', 'وائل كفوري',
   'راغب علامة', 'ناصيف زيتون', 'كاظم الساهر', 'سعد لمجرد', 'حاتم عمور', 'الشاب خالد'
 ];
-const DISCOVER = ['اغنية جديدة', 'فيديو كليب جديد', 'كليب حصري', 'اغاني خليجية جديدة', 'اغاني مصرية جديدة', 'اغاني عراقية جديدة', 'اغاني مغربية جديدة', 'اغاني لبنانية جديدة'];
+const WORLD_ARTISTS = [
+  'Taylor Swift', 'The Weeknd', 'Ed Sheeran', 'Billie Eilish', 'Dua Lipa', 'Bruno Mars', 'Ariana Grande',
+  'Justin Bieber', 'Drake', 'Rihanna', 'Beyoncé', 'Lady Gaga', 'Coldplay', 'Imagine Dragons', 'Maroon 5',
+  'Shakira', 'Bad Bunny', 'Karol G', 'Sabrina Carpenter', 'Olivia Rodrigo', 'Post Malone', 'Sia', 'Adele',
+  'Miley Cyrus', 'Harry Styles', 'Selena Gomez', 'Charlie Puth', 'Calvin Harris', 'David Guetta', 'BLACKPINK',
+  'Stray Kids', 'ROSÉ', 'Kendrick Lamar', 'SZA', 'Eminem', 'Doja Cat', 'Linkin Park', 'Katy Perry'
+];
+const WORLD_DISCOVER = ['new music video', 'official music video', 'new song', 'official audio', 'pop music video', 'hip hop music video', 'kpop MV', 'reggaeton video oficial', 'rock official video', 'EDM official video'];
+const ARAB_DISCOVER = ['اغنية جديدة', 'فيديو كليب جديد', 'كليب حصري', 'اغاني خليجية جديدة', 'اغاني مصرية جديدة', 'اغاني عراقية جديدة', 'اغاني مغربية جديدة', 'اغاني لبنانية جديدة'];
 const SP_CHANNEL = 'EgIQAg=='; const SP_PLAYLIST = 'EgIQAw=='; const SP_WEEK_VIDEO = 'EgQIAxAB';
-const NOT_SONG = /شيل[ةه]|شيلات|نشيد|أنشودة|انشودة|إنشاد|اناشيد|أناشيد|قرآن|تلاوة|محاضرة|بودكاست/;
+const NOT_SONG = /شيل[ةه]|شيلات|نشيد|أنشودة|انشودة|إنشاد|اناشيد|أناشيد|قرآن|تلاوة|محاضرة|بودكاست|\b(podcast|interview|reaction|behind the scenes|tutorial|lesson|vlog)\b/i;
 const ARABIC = /[؀-ۿ]/;
 const DAY = 86400;
 
@@ -44,12 +54,12 @@ async function resolveArtist(name, cache) {
   return ch ? { channelId: ch.id, name } : null;
 }
 
-/** Channels behind this week's new Arabic songs (labels and singers). */
-async function discovered() {
-  const lists = await pool(DISCOVER, 4, (q) => search(q, SP_WEEK_VIDEO));
+/** Channels behind this week's new songs (labels and singers). */
+async function discovered(cfg) {
+  const lists = await pool(cfg.discover, 4, (q) => search(q, SP_WEEK_VIDEO));
   const out = new Map();
   for (const it of lists.flat().filter(Boolean)) {
-    if (it.type !== 'video' || !it.channelId || !ARABIC.test(it.title) || NOT_SONG.test(`${it.title} ${it.sub}`)) continue;
+    if (it.type !== 'video' || !it.channelId || !cfg.accept(it) || NOT_SONG.test(`${it.title} ${it.sub}`) || isAdult(it)) continue;
     if (!out.has(it.channelId)) out.set(it.channelId, { channelId: it.channelId, name: it.sub });
     if (out.size >= 25) break;
   }
@@ -59,7 +69,7 @@ async function discovered() {
 /** Newest song of a channel (exact time from its uploads RSS). */
 async function newestSong(c) {
   const vids = await yt.rss(c.channelId);
-  const v = vids.find((x) => !NOT_SONG.test(x.title));
+  const v = vids.find((x) => !NOT_SONG.test(x.title) && !isAdult(x));
   if (!v) return null;
   const age = itemAge(v);
   return age > 120 * DAY ? null : { ...v, sub: v.sub || c.name, age, meta: relTime(age) };
@@ -69,8 +79,8 @@ async function newestSong(c) {
  * Newest album of a singer: official album playlists (OLAK…) from search, each checked through its own RSS:
  * owner must be the singer ("Singer - Topic"), 3+ tracks (singles are not albums), date = newest track.
  */
-async function newestAlbum(c) {
-  const cands = (await search(`${c.name} ألبوم`, SP_PLAYLIST))
+async function newestAlbum(c, word) {
+  const cands = (await search(`${c.name} ${word}`, SP_PLAYLIST))
     .filter((p) => p.type === 'playlist' && /^OLAK5uy_/.test(p.id)).slice(0, 4);
   const want = norm(c.name);
   let best = null;
@@ -90,26 +100,33 @@ async function newestAlbum(c) {
   return { ...best, age, meta: `ألبوم • ${songs} • ${relTime(age)}` };
 }
 
-let memo = null; // { at, data } — 30 min, so going back and forth is instant
+const KINDS = {
+  arab: { artists: ARAB_ARTISTS, discover: ARAB_DISCOVER, albumWord: 'ألبوم', accept: (it) => ARABIC.test(it.title) },
+  world: { artists: WORLD_ARTISTS, discover: WORLD_DISCOVER, albumWord: 'album', accept: (it) => !ARABIC.test(it.title) }
+};
+const memo = {}; // kind -> { at, data } — 30 min, so going back and forth is instant
 
-/** الموسيقى العربية page data. */
-export async function arabicMusic({ fresh } = {}) {
-  if (!fresh && memo && Date.now() - memo.at < 30 * 60e3) return memo.data;
+/** Music page data: kind 'arab' (الموسيقى العربية) or 'world' (الموسيقى الأجنبية). */
+export async function musicPage(kind, { fresh } = {}) {
+  const cfg = KINDS[kind];
+  if (!fresh && memo[kind] && Date.now() - memo[kind].at < 30 * 60e3) return memo[kind].data;
   const cache = idCache();
   const [fixed, found] = await Promise.all([
-    pool(ARTISTS, 5, (n) => resolveArtist(n, cache)).then((r) => { saveIds(cache); return r.filter(Boolean); }),
-    discovered().catch(() => [])
+    pool(cfg.artists, 5, (n) => resolveArtist(n, cache)).then((r) => { saveIds(cache); return r.filter(Boolean); }),
+    discovered(cfg).catch(() => [])
   ]);
   const channels = new Map();
   for (const c of [...fixed, ...found]) if (!channels.has(c.channelId)) channels.set(c.channelId, c);
   const list = [...channels.values()];
   const [songs, albums] = await Promise.all([
     pool(list, 6, newestSong),
-    pool(fixed, 4, newestAlbum) // albums: for named singers (label channels have no albums of their own)
+    pool(fixed, 4, (c) => newestAlbum(c, cfg.albumWord)) // albums: named singers (label channels have no albums of their own)
   ]);
   const out = [...songs, ...albums].filter(Boolean);
   out.sort((a, b) => a.age - b.age);
   const data = { shelves: [{ title: '', items: out }], items: out, continuation: null };
-  memo = { at: Date.now(), data };
+  memo[kind] = { at: Date.now(), data };
   return data;
 }
+
+export const arabicMusic = (o) => musicPage('arab', o);

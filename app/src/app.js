@@ -1,7 +1,7 @@
 // Main TV UI: sidebar + pages of rows/grids, layer stack, remote key routing.
 import { yt, TOPICS } from './yt.js';
-import { exploreWorld, exploreArab, trendWorld, trendArab, topicByDate } from './discover.js';
-import { arabicMusic } from './music.js';
+import { exploreWorld, exploreArab, trendWorld, trendArab, trendMusic, topicByDate } from './discover.js';
+import { musicPage } from './music.js';
 import { dearrow } from './dearrow.js';
 import { Player } from './player.js';
 import { settings, history, favorites, searches, PRESETS, presetLabel, presetValue, setPreset } from './store.js';
@@ -24,6 +24,8 @@ const NAV = [
   ['history', '🕘', 'السجل'],
   ['library', '📚', 'المكتبة'],
   ['arabMusic', '🎶', 'الموسيقى العربية'],
+  ['worldMusic', '🎸', 'الموسيقى الأجنبية'],
+  ['trendMusic', '🎧', 'تريند الأغاني العالمي'],
   ['music', '🎵', 'موسيقى'],
   ['gaming', '🎮', 'ألعاب'],
   ['news', '📰', 'أخبار'],
@@ -214,22 +216,25 @@ export class App {
           if (!favorites.list().length) toast('اضغط زر القلب ❤ أثناء مشاهدة فيديو لإضافة قناته للمفضلة', 5000);
           return yt.favorites();
         }, mode: 'grid', refreshOnReturn: true }); break;
-      case 'exploreWorld': case 'exploreArab': case 'trendWorld': case 'trendArab': {
+      case 'exploreWorld': case 'exploreArab': case 'trendWorld': case 'trendArab': case 'trendMusic': {
         const P = {
           exploreWorld: ['استكشف العالم', 'أوروبا وأمريكا وروسيا وكوريا — قنوات ومواضيع متنوعة', exploreWorld],
           exploreArab: ['استكشف العرب', 'من كل الدول العربية — قنوات ومواضيع متنوعة', exploreArab],
           trendWorld: ['تريند العالم', 'الأكثر مشاهدة حول العالم الآن', trendWorld],
-          trendArab: ['الترند العربي', 'الأكثر مشاهدة في العالم العربي الآن', trendArab]
+          trendArab: ['الترند العربي', 'الأكثر مشاهدة في العالم العربي الآن', trendArab],
+          trendMusic: ['تريند الأغاني العالمي', 'أكثر الأغاني مشاهدة في العالم الآن', trendMusic]
         }[id];
         this.open({ title: P[0], head: `<h1>${P[0]}</h1><div class="head-note">${P[1]} — من الأحدث إلى الأقدم</div>`,
           load: () => P[2](), mode: 'grid', emptyText: 'تعذّر جلب الفيديوهات، جرّب التحديث' });
         break;
       }
-      case 'arabMusic': {
-        const pg = { title: 'الموسيقى العربية', head: '<h1>الموسيقى العربية</h1><div class="head-note">أحدث أغنية وأحدث ألبوم من كل مطرب — من الأحدث إلى الأقدم</div>',
+      case 'arabMusic': case 'worldMusic': {
+        const title = id === 'arabMusic' ? 'الموسيقى العربية' : 'الموسيقى الأجنبية';
+        const pg = { title, head: `<h1>${title}</h1><div class="head-note">أحدث أغنية وأحدث ألبوم من كل مطرب — من الأحدث إلى الأقدم</div>`,
           mode: 'grid', emptyText: 'تعذّر جلب الأغاني، جرّب التحديث' };
         // the sidebar "refresh" button reloads with fresh data instead of the 30-min cache
-        pg.load = () => { const fresh = pg.loaded; pg.loaded = true; return arabicMusic({ fresh }); };
+        const kind = id === 'arabMusic' ? 'arab' : 'world';
+        pg.load = () => { const fresh = pg.loaded; pg.loaded = true; return musicPage(kind, { fresh }); };
         this.open(pg);
         break;
       }

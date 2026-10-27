@@ -52,6 +52,12 @@ const WORLD_TREND = [
   'challenge', 'review', 'vlog', 'reaction', 'interview', 'documentary', 'anime', 'clip officiel', 'canción',
   'клип', 'новости', '뮤직비디오', 'MV'
 ];
+// songs only, many languages and styles (most-watched music worldwide)
+const MUSIC_TREND = [
+  'official music video', 'music video', 'official audio', 'lyric video', 'new song', 'MV', 'kpop MV', 'pop song',
+  'hip hop', 'rap song', 'reggaeton', 'afrobeats', 'rock song', 'EDM', 'country song', 'video oficial',
+  'clip officiel', 'клип', 'фит', 'Musikvideo', 'فيديو كليب', 'أغنية', '뮤직비디오', 'live performance'
+];
 const ARAB_TREND = [
   'فيديو كليب', 'أغنية', 'اخبار', 'عاجل', 'مباراة', 'ملخص', 'أهداف', 'برنامج', 'مسلسل', 'حلقة', 'بودكاست',
   'تحدي', 'مقلب', 'فلوق', 'ردة فعل', 'مقابلة', 'كوميدي', 'شيلة', 'مهرجان', 'السعودية', 'مصر', 'المغرب'
@@ -68,7 +74,7 @@ const SOUTH_ASIA_WORDS = /\b(hindi|bollywood|tamil|telugu|punjabi|bhojpuri|marat
 // sexual / adult content (titles or channel names), several languages; Restricted Mode is the main filter
 const ADULT = /\b(sex|sexy|porn|nsfw|nude|naked|erotic|onlyfans|18\+|xxx|hot girl|bikini try|lingerie|strip|секс|эрот|порно|섹시|노출|야한)\b|سكس|إباح|اباح|عاري|عارية|جنس|مثير(?:ة)?\s|بدون ملابس/i;
 
-const isAdult = (it) => ADULT.test(`${it.title} ${it.sub}`);
+export const isAdult = (it) => ADULT.test(`${it.title} ${it.sub}`);
 const RULES = {
   world: (it) => !isAdult(it) && !ARABIC.test(it.title) && !SOUTH_ASIA_SCRIPT.test(`${it.title} ${it.sub}`) && !SOUTH_ASIA_WORDS.test(`${it.title} ${it.sub}`),
   arab: (it) => !isAdult(it) && ARABIC.test(it.title) && !URDU_PERSIAN.test(it.title) && !SOUTH_ASIA_SCRIPT.test(it.title),
@@ -158,6 +164,8 @@ export const exploreWorld = () => paged({ kind: 'world', queries: WORLD_EXPLORE,
 export const exploreArab = () => paged({ kind: 'arab', queries: ARAB_EXPLORE, perQuery: 14, sort: 'relevance', perChannel: 1, rule: RULES.arab, excludePersonal: true });
 /** تريند العالم: most-watched uploads worldwide (YouTube retired its Trending page in 2025). */
 export const trendWorld = () => paged({ kind: 'world', queries: WORLD_TREND, perQuery: 18, sort: 'views', perChannel: 2, rule: RULES.worldTrend });
+/** تريند الأغاني العالمي: most-watched songs worldwide right now. */
+export const trendMusic = () => paged({ kind: 'world', queries: MUSIC_TREND, perQuery: 18, sort: 'views', perChannel: 2, rule: RULES.worldTrend });
 /** الترند العربي: most-watched Arabic uploads. */
 export const trendArab = () => paged({ kind: 'arab', queries: ARAB_TREND, perQuery: 18, sort: 'views', perChannel: 2, rule: RULES.arab });
 
