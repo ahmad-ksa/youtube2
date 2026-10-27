@@ -166,6 +166,7 @@ img { display: block; }
 .head-actions { margin: -10px 10px 20px; }
 .head-actions button { padding: 14px 30px; border-radius: 30px; background: #222; font-size: 26px; }
 .head-actions button.focused { background: #fff; color: #000; }
+.head-note { margin: -14px 10px 22px; color: #aaa; font-size: 24px; }
 .sg-label { color: var(--muted); font-size: 22px; align-self: center; }
 
 .search-mic { width: 84px; border-radius: 50%; background: #222; font-size: 34px; text-align: center; }

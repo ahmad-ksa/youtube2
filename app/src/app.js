@@ -1,5 +1,6 @@
 // Main TV UI: sidebar + pages of rows/grids, layer stack, remote key routing.
 import { yt, TOPICS } from './yt.js';
+import { explore, trending, topicByDate } from './discover.js';
 import { dearrow } from './dearrow.js';
 import { Player } from './player.js';
 import { settings, history, favorites, searches, PRESETS, presetLabel, presetValue, setPreset } from './store.js';
@@ -13,6 +14,8 @@ const NAV = [
   ['home', '🏠', 'الرئيسية'],
   ['fav', '❤️', 'المفضلة'],
   ['new', '🆕', 'الجديد'],
+  ['explore', '🧭', 'استكشف'],
+  ['trend', '🔥', 'الترند'],
   ['subs', '📺', 'الاشتراكات'],
   ['channels', '👥', 'القنوات'],
   ['history', '🕘', 'السجل'],
@@ -207,6 +210,12 @@ export class App {
           if (!favorites.list().length) toast('اضغط زر القلب ❤ أثناء مشاهدة فيديو لإضافة قناته للمفضلة', 5000);
           return yt.favorites();
         }, mode: 'grid', refreshOnReturn: true }); break;
+      case 'explore':
+        this.open({ title: 'استكشف', head: '<h1>استكشف</h1><div class="head-note">قنوات ومواضيع متنوعة من كل مكان — من الأحدث إلى الأقدم</div>',
+          load: () => explore(), mode: 'grid', emptyText: 'تعذّر جلب فيديوهات، جرّب التحديث' }); break;
+      case 'trend':
+        this.open({ title: 'الترند', head: '<h1>الترند</h1><div class="head-note">الأكثر مشاهدة حول العالم الآن — من الأحدث إلى الأقدم</div>',
+          load: () => trending(), mode: 'grid', emptyText: 'تعذّر جلب الترند، جرّب التحديث' }); break;
       case 'highlights':
         this.open({ title: 'ملخصات المباريات', load: () => yt.highlights(), mode: 'grid', refreshOnReturn: true }); break;
       case 'search': this.openSearch(); break;
@@ -216,6 +225,8 @@ export class App {
       case 'history':
         this.open({
           title: 'السجل',
+          head: `<h1>السجل</h1><div class="head-actions"><button class="f clear-history">🗑 مسح السجل</button></div>`,
+          headInit: (head) => head.querySelector('.clear-history').addEventListener('click', () => this.clearHistory()),
           load: async () => {
             if (yt.loggedIn) { try { const r = await yt.history(); if (r.items.length) return r; } catch (e) { console.warn(e); } }
             return { shelves: [{ title: '', items: history.list() }], continuation: null };
@@ -228,7 +239,9 @@ export class App {
       case 'channels':
         if (!yt.loggedIn) return this.needLogin();
         this.open({ title: 'القنوات', load: () => yt.channels(), mode: 'grid', endpoint: '/browse' }); break;
-      case 'music': case 'gaming': case 'news': case 'sports': case 'live':
+      case 'gaming': case 'news':
+        this.open({ title: TOPICS[id].title, load: () => topicByDate(id), mode: 'grid', refreshOnReturn: false }); break;
+      case 'music': case 'sports': case 'live':
         this.open({ title: TOPICS[id].title, load: () => yt.topic(id), mode: 'rows' }); break;
       case 'settings': this.openSettings(); break;
       case 'account': this.openAccount(); break;
@@ -304,6 +317,7 @@ export class App {
       if (token !== this.renderToken) return;
       page.cache = data;
       page.continuation = page.mode === 'grid' ? (data.gridContinuation || data.continuation) : data.continuation;
+      if (data.more) { page.more = data.more; page.continuation = 'more'; }
       this.drawPage(page, data);
       if (!data.items?.length && !data.shelves?.some((s) => s.items.length)) {
         this.pageEl.innerHTML = `<div class="empty">${esc(page.emptyText || 'لا يوجد محتوى')}</div>`;
@@ -418,10 +432,17 @@ export class App {
     if (!nearEnd) return;
     this.loadingMore = true;
     try {
-      const r = await yt.more(page.endpoint || '/browse', page.continuation, page.client);
-      if (page !== this.pages[this.pages.length - 1]) return;
-      const nextTok = page.mode === 'grid' ? (r.gridContinuation || r.continuation) : r.continuation;
-      page.continuation = nextTok !== page.continuation ? nextTok : null;
+      let r;
+      if (page.more) { // date-windowed feeds (Explore / Trending): next, older batch
+        r = await page.more();
+        if (page !== this.pages[this.pages.length - 1]) return;
+        if (r.done) page.continuation = null;
+      } else {
+        r = await yt.more(page.endpoint || '/browse', page.continuation, page.client);
+        if (page !== this.pages[this.pages.length - 1]) return;
+        const nextTok = page.mode === 'grid' ? (r.gridContinuation || r.continuation) : r.continuation;
+        page.continuation = nextTok !== page.continuation ? nextTok : null;
+      }
       if (page.mode === 'grid') {
         const known = new Set([...grid.children].map((c) => this.cardData.get(c)?.id));
         for (const it of r.items) if (!known.has(it.id)) grid.appendChild(this.card(it));
@@ -667,6 +688,17 @@ export class App {
 
   menu(title, options, onPick, onClose) {
     this.showModal(title, '', options.map((o) => ({ label: o.label, on: o.on, pick: () => { this.modalOnClose = null; this.hideModal(); onPick(o.value); } })), onClose);
+  }
+
+  /** Clears the local watch history (and the cached home) so "مقترح لك" starts over with fresh videos. */
+  clearHistory() {
+    const note = yt.loggedIn ? '\n(سجل حساب يوتيوب نفسه لا يُمسح من هنا)' : '';
+    this.confirm('مسح سجل المشاهدة؟ ستتجدد مقترحات الرئيسية.' + note, () => {
+      history.clear();
+      try { localStorage.removeItem('ytlg.homeCache'); } catch { /* storage unavailable */ }
+      toast('تم مسح السجل — ستظهر مقترحات جديدة في الرئيسية', 3500);
+      this.reload();
+    });
   }
 
   confirm(text, yes) {

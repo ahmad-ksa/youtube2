@@ -80,10 +80,12 @@ function fromVideoRenderer(v) {
   if (!v.videoId) return null;
   const live = (v.badges || []).some((b) => /LIVE/.test(b.metadataBadgeRenderer?.style || '')) ||
     (v.thumbnailOverlays || []).some((o) => o.thumbnailOverlayTimeStatusRenderer?.style === 'LIVE');
+  const owner = v.ownerText || v.shortBylineText || v.longBylineText;
   return {
     type: 'video', id: v.videoId,
     title: text(v.title),
-    sub: text(v.ownerText || v.shortBylineText || v.longBylineText),
+    sub: text(owner),
+    channelId: owner?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || '',
     meta: [text(v.shortViewCountText || v.viewCountText), text(v.publishedTimeText)].filter(Boolean).join(' • '),
     duration: text(v.lengthText) || text((v.thumbnailOverlays || []).find((o) => o.thumbnailOverlayTimeStatusRenderer)?.thumbnailOverlayTimeStatusRenderer?.text),
     live, thumb: vthumb(v.videoId)
