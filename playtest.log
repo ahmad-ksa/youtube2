@@ -1,0 +1,153 @@
+
+######## VIDEO LXb3EKWsInQ
+  [warning] [player] VISIONOS يُرجى تسجيل الدخول لتأكيد أنّك لست روبوت دردشة
+  [warning] [player] TV يُرجى تسجيل الدخول لتأكيد أنّك لست روبوت دردشة
+  [warning] [player] WEB_EMBEDDED failed Z: This video is unavailable
+    at new Qs (<anonymous>:49:6885)
+    at new S9 (<anonymous>:49:45817)
+    at o.fetchPlayer (<anonymous>:208:5203)
+    at async o.load (<anonymous>:208:5975)
+    at async o.open (<anonymous>:208:4459)
+    at async <anonymous>:260:30
+  [error] Failed to load resource: the server responded with a status of 404 ()
+  [warning] [player] IOS يُرجى تسجيل الدخول لتأكيد أنّك لست روبوت دردشة
+  [warning] [player] MWEB يُرجى تسجيل الدخول لتأكيد أنّك لست روبوت دردشة
+  [error] [player] Error: يُرجى تسجيل الدخول لتأكيد أنّك لست روبوت دردشة
+    at o.fetchPlayer (<anonymous>:208:5663)
+    at async o.load (<anonymous>:208:5975)
+    at async o.open (<anonymous>:208:4459)
+    at async <anonymous>:260:30
+--- after 10s
+{
+ "youtubeFormats": "",
+ "manifestVariants": 0,
+ "table": [],
+ "restrictions": {
+  "minWidth": 0,
+  "maxWidth": null,
+  "minHeight": 0,
+  "maxHeight": null,
+  "minPixels": 0,
+  "maxPixels": null,
+  "minFrameRate": 0,
+  "maxFrameRate": null,
+  "minBandwidth": 0,
+  "maxBandwidth": null,
+  "minChannelsCount": 0,
+  "maxChannelsCount": null
+ },
+ "abr": false,
+ "video": {
+  "t": 0,
+  "rs": 0,
+  "w": 0,
+  "h": 0,
+  "paused": true
+ },
+ "caps": []
+}
+--- after 25s
+{
+ "youtubeFormats": "",
+ "manifestVariants": 0,
+ "table": [],
+ "restrictions": {
+  "minWidth": 0,
+  "maxWidth": null,
+  "minHeight": 0,
+  "maxHeight": null,
+  "minPixels": 0,
+  "maxPixels": null,
+  "minFrameRate": 0,
+  "maxFrameRate": null,
+  "minBandwidth": 0,
+  "maxBandwidth": null,
+  "minChannelsCount": 0,
+  "maxChannelsCount": null
+ },
+ "abr": false,
+ "video": {
+  "t": 0,
+  "rs": 0,
+  "w": 0,
+  "h": 0,
+  "paused": true
+ },
+ "caps": []
+}
+
+######## VIDEO aqz-KE-bpKQ
+  [warning] [player] VISIONOS يُرجى تسجيل الدخول لتأكيد أنّك لست روبوت دردشة
+  [warning] [player] TV يُرجى تسجيل الدخول لتأكيد أنّك لست روبوت دردشة
+  [warning] [player] WEB_EMBEDDED failed Z: This video is unavailable
+    at new Qs (<anonymous>:49:6885)
+    at new S9 (<anonymous>:49:45817)
+    at o.fetchPlayer (<anonymous>:208:5203)
+    at async o.load (<anonymous>:208:5975)
+    at async o.open (<anonymous>:208:4459)
+    at async <anonymous>:260:30
+  [warning] [player] IOS يُرجى تسجيل الدخول لتأكيد أنّك لست روبوت دردشة
+  [warning] [player] MWEB يُرجى تسجيل الدخول لتأكيد أنّك لست روبوت دردشة
+  [error] [player] Error: يُرجى تسجيل الدخول لتأكيد أنّك لست روبوت دردشة
+    at o.fetchPlayer (<anonymous>:208:5663)
+    at async o.load (<anonymous>:208:5975)
+    at async o.open (<anonymous>:208:4459)
+    at async <anonymous>:260:30
+--- after 10s
+{
+ "youtubeFormats": "",
+ "manifestVariants": 0,
+ "table": [],
+ "restrictions": {
+  "minWidth": 0,
+  "maxWidth": null,
+  "minHeight": 0,
+  "maxHeight": null,
+  "minPixels": 0,
+  "maxPixels": null,
+  "minFrameRate": 0,
+  "maxFrameRate": null,
+  "minBandwidth": 0,
+  "maxBandwidth": null,
+  "minChannelsCount": 0,
+  "maxChannelsCount": null
+ },
+ "abr": false,
+ "video": {
+  "t": 0,
+  "rs": 0,
+  "w": 0,
+  "h": 0,
+  "paused": true
+ },
+ "caps": []
+}
+--- after 25s
+{
+ "youtubeFormats": "",
+ "manifestVariants": 0,
+ "table": [],
+ "restrictions": {
+  "minWidth": 0,
+  "maxWidth": null,
+  "minHeight": 0,
+  "maxHeight": null,
+  "minPixels": 0,
+  "maxPixels": null,
+  "minFrameRate": 0,
+  "maxFrameRate": null,
+  "minBandwidth": 0,
+  "maxBandwidth": null,
+  "minChannelsCount": 0,
+  "maxChannelsCount": null
+ },
+ "abr": false,
+ "video": {
+  "t": 0,
+  "rs": 0,
+  "w": 0,
+  "h": 0,
+  "paused": true
+ },
+ "caps": []
+}

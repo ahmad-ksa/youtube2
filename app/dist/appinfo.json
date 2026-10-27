@@ -1,0 +1,29 @@
+{
+  "id": "youtube.leanback.v4",
+  "version": "1.1.0",
+  "vendor": "ahmad-ksa",
+  "type": "web",
+  "main": "index.html",
+  "title": "YouTube LG",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "iconColor": "#ff2d2d",
+  "splashBackground": "splash.png",
+  "bgImage": "splash.png",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "supportQuickStart": true,
+  "trustLevel": "default",
+  "deeplinkingParams": "{\"contentTarget\":\"v=$CONTENTID\"}",
+  "vendorExtension": {
+    "userAgent": "$browserName$/$browserVersion$ ($platformName$-$platformVersion$), _TV_O18/$firmwareVersion$ (LG, $modelName$, $networkMode$)",
+    "allowCrossDomain": true
+  },
+  "requiredACG": [],
+  "inAppSearchParams": "{\"target\":\"q=$SEARCH_KEYWORD\"}",
+  "inAppVoiceIntent": "{\"target\":{\"intent\":\"$INTENT\",\"intentParam\":\"$INTENT_PARAM\",\"languageCode\":\"$LANG_CODE\"}}",
+  "supportQueryRouting": "{\"googleAssistant\":true,\"amazonAlexa\":true}",
+  "dialAppName": "YouTube",
+  "supportGIP": true,
+  "wolwowlan": true
+}
