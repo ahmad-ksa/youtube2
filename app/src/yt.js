@@ -5,7 +5,7 @@ import { settings, history, favorites } from './store.js';
 
 Platform.shim.eval = async (data) => new Function(data.output)();
 // webOS' browser throws "Illegal invocation" when fetch is called with another `this`.
-const boundFetch = (input, init) => window.fetch(input, init);
+export const boundFetch = (input, init) => window.fetch(input, init);
 Platform.shim.fetch = boundFetch;
 
 export const TOPICS = {
@@ -31,6 +31,23 @@ export function ageOf(meta) {
     return n * sec;
   }
   return 1e12;
+}
+
+/** Age of an item in seconds: exact publish time when known (RSS), else parsed from its date text. */
+export function itemAge(it) {
+  if (it.publishedAt) return Math.max(0, (Date.now() - it.publishedAt) / 1000);
+  const m = ageOf(it.meta);
+  return m < 1e12 ? m : ageOf(it.sub); // some layouts put "views • date" in the first line
+}
+
+/** "منذ 3 ساعات"-style text from seconds. */
+export function relTime(sec) {
+  const u = [[31536000, 'سنة', 'سنوات'], [2592000, 'شهر', 'أشهر'], [604800, 'أسبوع', 'أسابيع'], [86400, 'يوم', 'أيام'], [3600, 'ساعة', 'ساعات'], [60, 'دقيقة', 'دقائق']];
+  for (const [n, one, many] of u) {
+    const k = Math.floor(sec / n);
+    if (k >= 1) return 'منذ ' + (k === 1 ? one : k === 2 ? (one === 'سنة' ? 'سنتين' : one === 'ساعة' ? 'ساعتين' : one === 'دقيقة' ? 'دقيقتين' : one + 'ين') : k + ' ' + (k <= 10 ? many : one));
+  }
+  return 'الآن';
 }
 
 const HOME_TOPICS = ['music', 'gaming', 'news', 'sports'].map((k) => TOPICS[k]);
@@ -130,39 +147,81 @@ class YT {
     return this.channel(id);
   }
 
-  /** Newest video of each channel the user follows (subscriptions) or watched: one per channel, newest first. */
-  async latest() {
-    const out = []; const ids = new Set(); const names = new Set();
-    const add = (it, chId, name) => {
-      const n = name || it.sub || '';
-      if ((chId && ids.has(chId)) || (n && names.has(n))) return;
-      if (chId) ids.add(chId); if (n) names.add(n);
-      out.push({ ...it, sub: it.sub || n });
-    };
-    if (this.loggedIn) {
-      try {
-        const r = await this.subscriptions(); // already newest first -> first video of each channel = its latest
-        for (const it of r.items) if (it.type === 'video' && !it.live && !it.short) add(it, '', it.sub);
-      } catch (e) { console.warn('[latest] subs', e?.message); }
+  /**
+   * A channel's latest long-form uploads with exact publish times, from YouTube's own RSS feed of the
+   * "UULF" playlist (uploads without Shorts). Same origin, no extra permissions.
+   */
+  async rss(channelId) {
+    const res = await boundFetch(`/feeds/videos.xml?playlist_id=UULF${channelId.slice(2)}`);
+    if (!res.ok) throw new Error('rss ' + res.status);
+    const xml = await res.text();
+    const tag = (e, t) => (e.match(new RegExp(`<${t}[^>]*>([\\s\\S]*?)</${t}>`)) || [])[1] || '';
+    const un = (x) => x.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    const out = [];
+    for (const e of xml.match(/<entry>[\s\S]*?<\/entry>/g) || []) {
+      const id = tag(e, 'yt:videoId'); const at = Date.parse(tag(e, 'published'));
+      if (!id || !at || /\/shorts\//.test(e)) continue;
+      out.push({ type: 'video', id, title: un(tag(e, 'title')), sub: un(tag(tag(e, 'author'), 'name')), channelId, publishedAt: at, meta: '', thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, duration: '' });
     }
-    const watched = history.channels().filter((c) => !ids.has(c.channelId) && !(c.name && names.has(c.name))).slice(0, 20);
-    await Promise.all(watched.map((c) => this.channelVideos(c.channelId).then((r) => {
-      if (r.client !== 'WEB') return; // only the real "newest first" videos tab
-      const v = r.items.find((i) => i.type === 'video' && !i.live && !i.short);
-      if (v) add(v, c.channelId, c.name);
-    }).catch(() => { /* skip channel */ })));
-    out.forEach((i) => { i.age = ageOf(i.meta); });
+    return out;
+  }
+
+  /**
+   * Recent uploads of a list of channels, merged into ONE list sorted by publish time (newest first across
+   * all channels). Up to `per` videos per channel from the last `days` days. Exact times via RSS; a channel
+   * whose feed fails falls back to its Videos tab (relative date text).
+   */
+  async uploadsOf(channels, { per = 3, days = 30 } = {}) {
+    const out = [];
+    await Promise.all(channels.map(async (c) => {
+      let vids = [];
+      try { vids = await this.rss(c.channelId); } catch (e) {
+        try {
+          const r = await this.channelVideos(c.channelId);
+          if (r.client === 'WEB') vids = r.items.filter((i) => i.type === 'video' && !i.live && !i.short);
+        } catch { /* skip channel */ }
+      }
+      let n = 0;
+      for (const v of vids) {
+        const age = itemAge(v);
+        if (age > days * 86400 || n >= per) continue;
+        n++;
+        out.push({ ...v, sub: v.sub || c.name, age, meta: v.publishedAt ? relTime(age) : v.meta });
+      }
+    }));
     out.sort((a, b) => a.age - b.age);
+    return out;
+  }
+
+  /** Favourites: recent uploads of every hearted channel in one list, newest first across channels. */
+  async favorites() {
+    const out = await this.uploadsOf(favorites.list(), { per: 4, days: 45 });
     return { shelves: [{ title: '', items: out }], items: out, continuation: null };
   }
 
-  /** Favourites: the newest video of each hearted channel, newest first. */
-  async favorites() {
-    const out = [];
-    await Promise.all(favorites.list().map((c) => this.channelVideos(c.channelId).then((r) => {
-      const v = r.items.find((i) => i.type === 'video' && !i.live && !i.short);
-      if (v) out.push({ ...v, sub: v.sub || c.name, age: ageOf(v.meta) });
-    }).catch(() => { /* skip channel */ })));
+  /**
+   * الجديد: recent uploads of subscriptions (when signed in) and of channels the user watched, in ONE list
+   * sorted by publish time, newest first across all channels (up to 3 per channel, last 30 days).
+   */
+  async latest() {
+    const seen = new Set(); const out = [];
+    const push = (it) => { if (!seen.has(it.id)) { seen.add(it.id); out.push(it); } };
+    const subsIds = new Set();
+    if (this.loggedIn) {
+      try {
+        const r = await this.subscriptions(); // YouTube's own feed, already newest first
+        const perCh = new Map();
+        for (const it of r.items) {
+          if (it.type !== 'video' || it.live || it.short) continue;
+          const k = it.channelId || it.sub; const n = perCh.get(k) || 0;
+          if (n >= 3) continue;
+          perCh.set(k, n + 1); if (it.channelId) subsIds.add(it.channelId);
+          push({ ...it, age: itemAge(it) });
+        }
+      } catch (e) { console.warn('[latest] subs', e?.message); }
+    }
+    const watched = history.channels().filter((c) => !subsIds.has(c.channelId)).slice(0, 25);
+    for (const it of await this.uploadsOf(watched, { per: 3, days: 30 })) push(it);
     out.sort((a, b) => a.age - b.age);
     return { shelves: [{ title: '', items: out }], items: out, continuation: null };
   }

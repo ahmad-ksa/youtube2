@@ -1,6 +1,6 @@
 // Main TV UI: sidebar + pages of rows/grids, layer stack, remote key routing.
 import { yt, TOPICS } from './yt.js';
-import { explore, trending, topicByDate } from './discover.js';
+import { exploreWorld, exploreArab, trendWorld, trendArab, topicByDate } from './discover.js';
 import { dearrow } from './dearrow.js';
 import { Player } from './player.js';
 import { settings, history, favorites, searches, PRESETS, presetLabel, presetValue, setPreset } from './store.js';
@@ -14,8 +14,10 @@ const NAV = [
   ['home', '🏠', 'الرئيسية'],
   ['fav', '❤️', 'المفضلة'],
   ['new', '🆕', 'الجديد'],
-  ['explore', '🧭', 'استكشف'],
-  ['trend', '🔥', 'الترند'],
+  ['exploreWorld', '🌍', 'استكشف العالم'],
+  ['exploreArab', '🕌', 'استكشف العرب'],
+  ['trendWorld', '🔥', 'تريند العالم'],
+  ['trendArab', '📈', 'الترند العربي'],
   ['subs', '📺', 'الاشتراكات'],
   ['channels', '👥', 'القنوات'],
   ['history', '🕘', 'السجل'],
@@ -210,12 +212,17 @@ export class App {
           if (!favorites.list().length) toast('اضغط زر القلب ❤ أثناء مشاهدة فيديو لإضافة قناته للمفضلة', 5000);
           return yt.favorites();
         }, mode: 'grid', refreshOnReturn: true }); break;
-      case 'explore':
-        this.open({ title: 'استكشف', head: '<h1>استكشف</h1><div class="head-note">قنوات ومواضيع متنوعة من كل مكان — من الأحدث إلى الأقدم</div>',
-          load: () => explore(), mode: 'grid', emptyText: 'تعذّر جلب فيديوهات، جرّب التحديث' }); break;
-      case 'trend':
-        this.open({ title: 'الترند', head: '<h1>الترند</h1><div class="head-note">الأكثر مشاهدة حول العالم الآن — من الأحدث إلى الأقدم</div>',
-          load: () => trending(), mode: 'grid', emptyText: 'تعذّر جلب الترند، جرّب التحديث' }); break;
+      case 'exploreWorld': case 'exploreArab': case 'trendWorld': case 'trendArab': {
+        const P = {
+          exploreWorld: ['استكشف العالم', 'أوروبا وأمريكا وروسيا وكوريا — قنوات ومواضيع متنوعة', exploreWorld],
+          exploreArab: ['استكشف العرب', 'من كل الدول العربية — قنوات ومواضيع متنوعة', exploreArab],
+          trendWorld: ['تريند العالم', 'الأكثر مشاهدة حول العالم الآن', trendWorld],
+          trendArab: ['الترند العربي', 'الأكثر مشاهدة في العالم العربي الآن', trendArab]
+        }[id];
+        this.open({ title: P[0], head: `<h1>${P[0]}</h1><div class="head-note">${P[1]} — من الأحدث إلى الأقدم</div>`,
+          load: () => P[2](), mode: 'grid', emptyText: 'تعذّر جلب الفيديوهات، جرّب التحديث' });
+        break;
+      }
       case 'highlights':
         this.open({ title: 'ملخصات المباريات', load: () => yt.highlights(), mode: 'grid', refreshOnReturn: true }); break;
       case 'search': this.openSearch(); break;
