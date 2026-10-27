@@ -402,24 +402,23 @@ export class Player {
 
     if (token !== this.loadToken) return;
     const start = isLive ? undefined : (opts.at != null ? opts.at : resume.get(videoId) || undefined);
-    // start directly on our exact 1080p stream: narrow the player's first choice down to it (no command, no search)
     this.shaka.configure({ streaming: { dontChooseCodecs: true } }); // keep every YouTube quality/codec in the menu
+    // No restrictions at load: Shaka 4.16 permanently deletes every variant that fails the restrictions while it
+    // loads ("Dropping variant - not compatible with platform"), so a start lock left only 720p for the whole video.
+    // The start stream is steered instead by codec preference + an initial bandwidth estimate just above it.
+    const noLimits = { minHeight: 0, maxHeight: Infinity, minFrameRate: 0, maxFrameRate: Infinity, minBandwidth: 0, maxBandwidth: Infinity };
     const pick = !(uri && uri.startsWith('data:')) ? null : startFormats(sd.adaptive_formats || []);
-    const q = settings.get('quality'), fps = settings.get('fps');
-    const plainRestr = { maxHeight: q === 'max' || q === 'auto' ? Infinity : Number(q), maxFrameRate: fps === 'max' ? Infinity : Number(fps) };
     if (pick?.v) {
       const bw = (pick.v.bitrate || 0) + (pick.a?.bitrate || 0);
       console.info('[player] start', `${pick.v.height}p${pick.v.fps} ${pick.vCodec} | ${pick.aCodec}`);
       this.shaka.configure({
-        abr: { enabled: false, defaultBandwidthEstimate: 1e9 },
-        restrictions: {
-          minHeight: pick.v.height, maxHeight: pick.v.height,
-          minFrameRate: (pick.v.fps || 0) - 0.5, maxFrameRate: (pick.v.fps || 0) + 0.5,
-          minBandwidth: bw ? Math.floor(bw * 0.97) : 0, maxBandwidth: bw ? Math.ceil(bw * 1.03) : Infinity
-        }
+        preferredVideoCodecs: [pick.vCodec.split('.')[0]],
+        preferredAudioCodecs: pick.aCodec ? [pick.aCodec.split('.')[0]] : [],
+        abr: { enabled: false, useNetworkInformation: false, defaultBandwidthEstimate: bw ? Math.ceil(bw * 1.2) : 1e9 },
+        restrictions: noLimits
       });
     } else {
-      this.shaka.configure({ abr: { enabled: false, defaultBandwidthEstimate: 1e9 }, restrictions: plainRestr });
+      this.shaka.configure({ preferredVideoCodecs: preferredCodecs(), preferredAudioCodecs: [], abr: { enabled: false, useNetworkInformation: false, defaultBandwidthEstimate: 1e9 }, restrictions: noLimits });
     }
     // like pressing 1080p by hand: once the player has its tracks but is not playing, re-select (repeat until it plays)
     // backup only when the video is really stuck: no new data for 2.5s (never while data is arriving)
@@ -438,18 +437,7 @@ export class Player {
         toast('تعذّر بدء الفيديو — جرّب جودة أقل أو ترميز H.264 من الإعدادات', 6000);
       }
     }, 300);
-    try {
-      await this.shaka.load(uri, start);
-    } catch (e) {
-      if (!pick?.v || token !== this.loadToken || this.reopening || e?.code === 7000) throw e;
-      // the narrowed choice could not be met: start the normal way
-      console.warn('[player] exact start failed', e?.code, '- normal start');
-      this.shaka.configure({ restrictions: { minHeight: 0, minFrameRate: 0, minBandwidth: 0, maxBandwidth: Infinity, ...plainRestr } });
-      await this.shaka.load(uri, start);
-    }
-    this.shaka.configure({
-      restrictions: { minHeight: 0, maxHeight: Infinity, minFrameRate: 0, maxFrameRate: Infinity, minBandwidth: 0, maxBandwidth: Infinity }
-    });
+    await this.shaka.load(uri, start);
     if (token !== this.loadToken) return;
     const hs = [...new Set(this.shaka.getVariantTracks().map((t) => t.height))].sort((a, b) => b - a);
     console.info('[player] youtube max', maxHeight(info) + 'p', '| playable', hs.join(','), '| screen', screen.width + 'x' + screen.height);
