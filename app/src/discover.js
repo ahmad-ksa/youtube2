@@ -63,6 +63,36 @@ const ARAB_TREND = [
   'تحدي', 'مقلب', 'فلوق', 'ردة فعل', 'مقابلة', 'كوميدي', 'شيلة', 'مهرجان', 'السعودية', 'مصر', 'المغرب'
 ];
 
+// Saudi Arabia: cities, football, food, culture, desert life, entertainment
+const SAUDI_EXPLORE = [
+  'الرياض', 'جدة', 'الدمام', 'الخبر', 'مكة', 'المدينة المنورة', 'أبها', 'الطائف', 'القصيم', 'حائل', 'تبوك', 'العلا',
+  'نيوم', 'موسم الرياض', 'فلوق سعودي', 'طبخ سعودي', 'كبسة', 'مندي', 'قهوة سعودية', 'كشتة', 'رحلة برية', 'تطعيس',
+  'مقناص', 'هجن', 'خيل', 'سيارات سعودية', 'سوالف', 'قصة سعودية', 'بودكاست سعودي', 'مسلسل سعودي', 'كوميديا سعودية',
+  'دوري روشن', 'تقنية سعودي', 'مطاعم الرياض', 'تراث سعودي', 'العرضة السعودية', 'تحدي سعودي', 'مخيم'
+];
+const SAUDI_TREND = [
+  'السعودية', 'سعودي', 'الرياض', 'جدة', 'دوري روشن', 'الهلال', 'النصر', 'الاتحاد', 'الأهلي', 'شيلة', 'موسم الرياض',
+  'مسلسل سعودي', 'بودكاست سعودي', 'سنابات', 'فلوق سعودي', 'ملخص مباراة', 'أخبار السعودية', 'عاجل السعودية', 'برنامج سعودي'
+];
+// Gulf: the six GCC countries
+const GULF_EXPLORE = [
+  'الرياض', 'جدة', 'فلوق سعودي', 'كبسة', 'كشتة', 'الكويت', 'فلوق كويتي', 'مطاعم الكويت', 'الدوحة', 'قطر', 'دبي',
+  'أبوظبي', 'الشارقة', 'فلوق إماراتي', 'البحرين', 'المنامة', 'مسقط', 'صلالة', 'سلطنة عمان سياحة', 'طبخ خليجي', 'مجبوس',
+  'مسلسل خليجي', 'غوص', 'صيد سمك', 'برية', 'تراث خليجي', 'سيارات', 'سوالف خليجية', 'بودكاست خليجي', 'مخيم', 'هجن'
+];
+const GULF_TREND = [
+  'السعودية', 'الكويت', 'قطر', 'الإمارات', 'دبي', 'البحرين', 'سلطنة عمان', 'خليجي', 'مسلسل خليجي', 'شيلة', 'دوري روشن',
+  'دوري نجوم قطر', 'الدوري الإماراتي', 'الدوري الكويتي', 'أخبار الخليج', 'عاجل', 'ملخص مباراة', 'فلوق', 'بودكاست خليجي', 'كليب خليجي'
+];
+const GULF_SESSIONS = ['gl:SA', 'gl:AE', 'gl:KW', 'gl:QA', 'gl:BH', 'gl:OM'];
+
+// whole-word place / nationality markers (with or without "ال", and nisba endings: سعودي، سعودية، سعوديين…)
+const W = (words) => new RegExp(`(?:^|[\\s\\p{P}\\p{S}])(?:ال)?(?:${words})(?:ي|ية|يه|يين|يون)?(?=$|[\\s\\p{P}\\p{S}])`, 'u');
+const SAUDI_MARK = W('سعود|رياض|جدة|جده|دمام|خبر|مكة|مكه|المدينة المنورة|أبها|ابها|طائف|قصيم|حائل|تبوك|علا|نيوم|هلال|نصر|اتحاد|أهلي|اهلي|روشن|نجد|حجاز');
+// bare "عمان" is left out on purpose: it is also Amman (Jordan); Omani videos say سلطنة عمان / عماني / مسقط / صلالة
+const GULF_OTHER = W('كويت|قطر|إمارات|امارات|دبي|أبوظبي|ابوظبي|شارقة|شارقه|بحرين|منامة|سلطنة عمان|عماني|مسقط|صلالة|دوحة|دوحه');
+const NON_GULF = W('مصر|قاهرة|قاهره|إسكندرية|اسكندرية|مغرب|جزائر|تونس|ليبيا|ليب|عراق|بغداد|سوريا|سوري|شام|دمشق|حلب|لبنان|بيروت|أردن|اردن|فلسطين|غزة|غزه|سودان|يمن|صنعاء|موريتاني|صومال');
+
 // ---------------------------------------------------------------- filters
 
 const ARABIC = /[؀-ۿ]/;
@@ -78,7 +108,19 @@ export const isAdult = (it) => ADULT.test(`${it.title} ${it.sub}`);
 const RULES = {
   world: (it) => !isAdult(it) && !ARABIC.test(it.title) && !SOUTH_ASIA_SCRIPT.test(`${it.title} ${it.sub}`) && !SOUTH_ASIA_WORDS.test(`${it.title} ${it.sub}`),
   arab: (it) => !isAdult(it) && ARABIC.test(it.title) && !URDU_PERSIAN.test(it.title) && !SOUTH_ASIA_SCRIPT.test(it.title),
-  worldTrend: (it) => !isAdult(it)
+  worldTrend: (it) => !isAdult(it),
+  // Saudi lists: Arabic; kept when it names Saudi places / clubs, dropped when it points to another country
+  saudi: (it) => {
+    if (!RULES.arab(it)) return false;
+    const t = `${it.title} ${it.sub}`;
+    return SAUDI_MARK.test(t) || (!GULF_OTHER.test(t) && !NON_GULF.test(t));
+  },
+  // Gulf lists: Arabic; kept when it names a Gulf country / place, dropped when it points outside the Gulf
+  gulf: (it) => {
+    if (!RULES.arab(it)) return false;
+    const t = `${it.title} ${it.sub}`;
+    return SAUDI_MARK.test(t) || GULF_OTHER.test(t) || !NON_GULF.test(t);
+  }
 };
 
 // ---------------------------------------------------------------- sessions
@@ -87,7 +129,9 @@ const sessions = {};
 /** Guest session with Restricted Mode, separate from the signed-in one. Falls back to the main session. */
 function session(kind) {
   if (!sessions[kind]) {
-    const opt = kind === 'world' ? { lang: 'en', location: 'US' } : { lang: 'ar', location: settings.get('gl') || 'SA' };
+    const opt = kind === 'world' ? { lang: 'en', location: 'US' }
+      : kind.startsWith('gl:') ? { lang: 'ar', location: kind.slice(3) } // a Gulf country's own YouTube
+      : { lang: 'ar', location: settings.get('gl') || 'SA' };
     sessions[kind] = Innertube.create({ ...opt, enable_safety_mode: true, retrieve_player: false, generate_session_locally: false, fetch: boundFetch })
       .catch((e) => { console.warn('[discover] session', kind, e?.message); sessions[kind] = null; return null; });
   }
@@ -127,7 +171,8 @@ function feed({ kind, queries, perQuery, sort, perChannel, rule, excludePersonal
     if (w >= WINDOWS.length) return null;
     const win = WINDOWS[w++];
     const take = []; for (let k = 0; k < perQuery; k++) take.push(pool[(qi++) % pool.length]);
-    const lists = await Promise.all(take.map((q) => search(kind, q, SP[sort][win.sp])));
+    const kinds = [].concat(kind);
+    const lists = await Promise.all(take.map((q, k) => search(kinds[k % kinds.length], q, SP[sort][win.sp])));
     const out = [];
     for (const it of lists.flat()) {
       const age = itemAge(it);
@@ -166,6 +211,12 @@ export const exploreArab = () => paged({ kind: 'arab', queries: ARAB_EXPLORE, pe
 export const trendWorld = () => paged({ kind: 'world', queries: WORLD_TREND, perQuery: 18, sort: 'views', perChannel: 2, rule: RULES.worldTrend });
 /** تريند الأغاني العالمي: most-watched songs worldwide right now. */
 export const trendMusic = () => paged({ kind: 'world', queries: MUSIC_TREND, perQuery: 18, sort: 'views', perChannel: 2, rule: RULES.worldTrend });
+/** استكشف السعودية / الترند السعودي: Saudi YouTube (region SA), Saudi subjects, other countries filtered out. */
+export const exploreSaudi = () => paged({ kind: 'gl:SA', queries: SAUDI_EXPLORE, perQuery: 14, sort: 'relevance', perChannel: 1, rule: RULES.saudi, excludePersonal: true });
+export const trendSaudi = () => paged({ kind: 'gl:SA', queries: SAUDI_TREND, perQuery: 16, sort: 'views', perChannel: 2, rule: RULES.saudi });
+/** استكشف الخليج / ترند الخليج: the six GCC countries, each search run in one of their own YouTube regions. */
+export const exploreGulf = () => paged({ kind: GULF_SESSIONS, queries: GULF_EXPLORE, perQuery: 14, sort: 'relevance', perChannel: 1, rule: RULES.gulf, excludePersonal: true });
+export const trendGulf = () => paged({ kind: GULF_SESSIONS, queries: GULF_TREND, perQuery: 18, sort: 'views', perChannel: 2, rule: RULES.gulf });
 /** الترند العربي: most-watched Arabic uploads. */
 export const trendArab = () => paged({ kind: 'arab', queries: ARAB_TREND, perQuery: 18, sort: 'views', perChannel: 2, rule: RULES.arab });
 

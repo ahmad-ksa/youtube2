@@ -1,6 +1,6 @@
 // Main TV UI: sidebar + pages of rows/grids, layer stack, remote key routing.
 import { yt, TOPICS } from './yt.js';
-import { exploreWorld, exploreArab, trendWorld, trendArab, trendMusic, topicByDate } from './discover.js';
+import { exploreWorld, exploreArab, trendWorld, trendArab, trendMusic, exploreSaudi, trendSaudi, exploreGulf, trendGulf, topicByDate } from './discover.js';
 import { musicPage } from './music.js';
 import { dearrow } from './dearrow.js';
 import { Player } from './player.js';
@@ -19,6 +19,10 @@ const NAV = [
   ['exploreArab', '🕌', 'استكشف العرب'],
   ['trendWorld', '🔥', 'تريند العالم'],
   ['trendArab', '📈', 'الترند العربي'],
+  ['exploreSaudi', '🏜️', 'استكشف السعودية'],
+  ['trendSaudi', '💚', 'الترند السعودي'],
+  ['exploreGulf', '🌊', 'استكشف الخليج'],
+  ['trendGulf', '⛵', 'ترند الخليج'],
   ['subs', '📺', 'الاشتراكات'],
   ['channels', '👥', 'القنوات'],
   ['history', '🕘', 'السجل'],
@@ -216,13 +220,17 @@ export class App {
           if (!favorites.list().length) toast('اضغط زر القلب ❤ أثناء مشاهدة فيديو لإضافة قناته للمفضلة', 5000);
           return yt.favorites();
         }, mode: 'grid', refreshOnReturn: true }); break;
-      case 'exploreWorld': case 'exploreArab': case 'trendWorld': case 'trendArab': case 'trendMusic': {
+      case 'exploreWorld': case 'exploreArab': case 'trendWorld': case 'trendArab': case 'trendMusic': case 'exploreSaudi': case 'trendSaudi': case 'exploreGulf': case 'trendGulf': {
         const P = {
           exploreWorld: ['استكشف العالم', 'أوروبا وأمريكا وروسيا وكوريا — قنوات ومواضيع متنوعة', exploreWorld],
           exploreArab: ['استكشف العرب', 'من كل الدول العربية — قنوات ومواضيع متنوعة', exploreArab],
           trendWorld: ['تريند العالم', 'الأكثر مشاهدة حول العالم الآن', trendWorld],
           trendArab: ['الترند العربي', 'الأكثر مشاهدة في العالم العربي الآن', trendArab],
-          trendMusic: ['تريند الأغاني العالمي', 'أكثر الأغاني مشاهدة في العالم الآن', trendMusic]
+          trendMusic: ['تريند الأغاني العالمي', 'أكثر الأغاني مشاهدة في العالم الآن', trendMusic],
+          exploreSaudi: ['استكشف السعودية', 'قنوات ومواضيع سعودية متنوعة', exploreSaudi],
+          trendSaudi: ['الترند السعودي', 'الأكثر مشاهدة في السعودية الآن', trendSaudi],
+          exploreGulf: ['استكشف الخليج', 'السعودية والإمارات والكويت وقطر والبحرين وعُمان', exploreGulf],
+          trendGulf: ['ترند الخليج', 'الأكثر مشاهدة في دول الخليج الآن', trendGulf]
         }[id];
         this.open({ title: P[0], head: `<h1>${P[0]}</h1><div class="head-note">${P[1]} — من الأحدث إلى الأقدم</div>`,
           load: () => P[2](), mode: 'grid', emptyText: 'تعذّر جلب الفيديوهات، جرّب التحديث' });
