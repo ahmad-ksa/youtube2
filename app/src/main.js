@@ -89,14 +89,22 @@ async function start() {
   window.__ytlgApp = app;
   app.mount();
 
-  // log screen: OK shows the whole log as QR codes (scan with the phone camera), left/right = next/previous code
+  // log screen: OK shows the whole log as ONE QR code (scan with the phone camera)
   let qrPages = null; let qrIdx = 0;
   const drawQr = (el) => {
     const q = qrcode(0, 'L');
-    q.addData(unescape(encodeURIComponent(qrPages[qrIdx])), 'Byte');
+    q.addData(qrPages[qrIdx], 'Byte');
     q.make();
-    el.innerHTML = `<div class="qr-box">${q.createSvgTag({ cellSize: 6, margin: 4, scalable: true })}</div>
-      <div class="qr-info">QR ${qrIdx + 1} / ${qrPages.length} — صوّره بكاميرا الجوال • ◀ ▶ للتنقل • OK للنص • رجوع للإغلاق</div>`;
+    const cell = Math.max(3, Math.floor(860 / (q.getModuleCount() + 8)));
+    el.innerHTML = `<div class="qr-box">${q.createSvgTag({ cellSize: cell, margin: 4, scalable: true })}</div>
+      <div class="qr-info">${qrPages.info} — صوّره بكاميرا الجوال • OK للنص • رجوع للإغلاق</div>`;
+  };
+  const showQr = async (el) => {
+    const { compactLogs, logQrPayload } = await import('./logqr.js');
+    const p = await logQrPayload(`YouTube LG v${VERSION}`, compactLogs(logs));
+    qrPages = [p.data];
+    qrPages.info = p.kind === 'text' ? 'السجل كاملًا كنص' : p.kind === 'link' ? 'رابط يعرض السجل كاملًا' : `آخر ${p.lines} سطر`;
+    qrIdx = 0; drawQr(el);
   };
   const toggleLogs = () => {
     let el = document.getElementById('logs');
@@ -111,13 +119,8 @@ async function start() {
     if (!el) return false;
     if (e.keyCode === 13) {
       if (qrPages) { qrPages = null; el.remove(); toggleLogs(); return true; }
-      const text = `YouTube LG v${VERSION}\n` + logs.join('\n');
-      qrPages = []; for (let i = 0; i < text.length; i += 900) qrPages.push(text.slice(i, i + 900));
-      qrIdx = 0; drawQr(el); return true;
-    }
-    if (qrPages && (e.keyCode === 37 || e.keyCode === 39)) {
-      qrIdx = Math.max(0, Math.min(qrPages.length - 1, qrIdx + (e.keyCode === 39 ? 1 : -1)));
-      drawQr(el); return true;
+      showQr(el).catch((err) => { el.textContent = 'تعذّر إنشاء رمز QR: ' + (err?.message || err); });
+      return true;
     }
     return ['ArrowUp', 'ArrowDown'].includes(e.key) || [38, 40].includes(e.keyCode);
   };

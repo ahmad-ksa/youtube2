@@ -524,7 +524,12 @@ export class App {
   drawSettings() {
     const qLabel = { max: 'أعلى جودة', auto: 'تلقائي' };
     const codecLabel = { auto: 'تلقائي (AV1 ثم VP9)', av01: 'AV1', vp9: 'VP9', avc1: 'H.264 (أخف)' };
+    const startLabel = { 480: '480p (الأسرع)', 720: '720p', 0: 'بدون — ابدأ مباشرة بالجودة القصوى' };
     const rows = [
+      ['preset', 'الجودة القصوى', presetLabel(), PRESETS],
+      ['autoQ', 'الجودة حسب سرعة الإنترنت', settings.get('autoQ') !== false ? 'تلقائي (ترتفع وتنزل)' : 'ثابتة على القصوى',
+        [[true, 'تلقائي (ترتفع وتنزل)'], [false, 'ثابتة على القصوى']]],
+      ['startQ', 'جودة البدء (أسرع تشغيل)', startLabel[settings.get('startQ')] || startLabel[480], Object.entries(startLabel).map(([v, l]) => [Number(v), l])],
       ['codec', 'الترميز المفضل', codecLabel[settings.get('codec')], Object.entries(codecLabel)],
       ['hdrOn', 'HDR', settings.get('hdrOn') ? 'مفعّل' : 'متوقف', [[true, 'مفعّل'], [false, 'متوقف']]],
       ['speed', 'السرعة الافتراضية', settings.get('speed') + 'x', [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((s) => [s, s + 'x'])],

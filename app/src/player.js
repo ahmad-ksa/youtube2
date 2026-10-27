@@ -72,9 +72,11 @@ function startFormats(formats) {
   const auds = formats.filter((f) => f.has_audio && !f.has_video);
   const main = auds.filter((f) => !f.audio_track || f.audio_track.audio_is_default || f.is_original);
   const a = (main.length ? main : auds).slice().sort((x, y) => (y.bitrate || 0) - (x.bitrate || 0))[0];
-  // start at 720p (same codec + fps, SDR) so the first piece arrives fast; switch up once it plays
+  // start low (setting "start quality", default 480p; same codec family, SDR) so the first piece arrives fast,
+  // then go up once it plays. 0 = start directly at the target.
+  const startQ = Number(settings.get('startQ') ?? 480);
   const fam = codecOfF(v).split('.')[0];
-  const lows = vids.filter((f) => codecOfF(f).startsWith(fam) && !isHdrFormat(f) && (f.height || 0) <= 720 && (f.height || 0) < (v.height || 0));
+  const lows = !startQ ? [] : vids.filter((f) => codecOfF(f).startsWith(fam) && !isHdrFormat(f) && (f.height || 0) <= startQ && (f.height || 0) < (v.height || 0));
   let low = null;
   if (lows.length) {
     const lh = Math.max(...lows.map((f) => f.height || 0));
@@ -185,7 +187,10 @@ export class Player {
     this.video.addEventListener('ratechange', () => this.drawInfo());
     this.video.addEventListener('loadedmetadata', () => this.drawChapters());
     this.video.addEventListener('error', () => console.error('[video] MediaError', this.video.error?.code, this.video.error?.message));
-    this.video.addEventListener('playing', () => console.info('[video] playing', this.video.videoWidth + 'x' + this.video.videoHeight));
+    this.video.addEventListener('playing', () => {
+      console.info('[video] playing', this.video.videoWidth + 'x' + this.video.videoHeight);
+      if (this.t0) { console.info('[time] first picture', this.ms() + ' ms after opening'); this.t0 = 0; }
+    });
     document.addEventListener('keyup', (e) => {
       if ((e.keyCode === KEY.LEFT || e.keyCode === KEY.RIGHT) && this.seekTarget != null) this.commitSeek();
     }, true);
@@ -226,11 +231,16 @@ export class Player {
   // ------------------------------------------------------------------ loading
 
   /** queue: optional list of items to play after this one (playlist mode). */
+  /** ms since the video was opened (timing log to see where start-up time goes) */
+  ms() { return Math.round(performance.now() - this.t0); }
+
   async open(item, queue, isBack) {
     const token = ++this.loadToken;
+    this.t0 = performance.now();
     if (!isBack && this.item && this.app.isTop(this) && this.item.id !== item.id) (this.prevStack ||= []).push(this.item);
     if (!this.app.isTop(this)) this.prevStack = [];
     this.item = item;
+    this.manual = false; // a manual quality pick only holds for the video it was made on
     if (queue !== undefined) this.queue = queue || [];
     this.details = null;
     this.chapters = [];
@@ -325,7 +335,9 @@ export class Player {
     this.reloadTimes = [];
     if (opts.reloadCtx !== undefined || opts.at !== undefined) setTimeout(() => { this.reopening = false; }, 0); // old session is gone
 
+    if (this.t0) console.info('[time] player ready', this.ms() + ' ms');
     const { info, cpn, client } = await this.fetchPlayer(videoId, only || (opts.reloadCtx ? this.client : undefined), opts.reloadCtx);
+    if (this.t0) console.info('[time] video info from YouTube', this.ms() + ' ms');
     this.client = client;
     this.usedAlt = !only && client !== CLIENTS[0];
     if (token !== this.loadToken) return;
@@ -446,22 +458,27 @@ export class Player {
         toast('تعذّر بدء الفيديو — جرّب جودة أقل أو ترميز H.264 من الإعدادات', 6000);
       }
     }, 300);
+    if (this.t0) console.info('[time] stream prepared', this.ms() + ' ms');
     await this.shaka.load(uri, start);
+    if (this.t0) console.info('[time] first data loaded', this.ms() + ' ms');
     if (token !== this.loadToken) return;
     const hs = [...new Set(this.shaka.getVariantTracks().map((t) => t.height))].sort((a, b) => b - a);
     console.info('[player] youtube max', maxHeight(info) + 'p', '| playable', hs.join(','), '| screen', screen.width + 'x' + screen.height);
     if (maxHeight(info) > (hs[0] || 0)) console.warn('[player] TV rejected higher formats', JSON.stringify(this.shaka.getVariantTracks().slice(0, 1).map((t) => t.videoCodec)));
     const act = this.shaka.getVariantTracks().find((t) => t.active);
     const onPick = pick?.v && act && act.height === pick.v.height && (act.videoCodec || '').startsWith(pick.vCodec.split('.')[0]);
-    if (!onPick) this.applyQuality();
+    if (act) console.info('[player] started on', `${act.height}p${Math.round(act.frameRate || 0)} ${act.videoCodec} ${act.audioCodec}`, '|', this.isAuto() ? 'auto' : 'fixed');
+    if (this.isAuto()) {
+      // automatic: Shaka's ABR raises the quality as soon as the measured speed allows (up to the max quality)
+      // and lowers it when the connection drops; switches keep the buffer, so there is no stall
+      this.enableAuto();
+    } else if (!onPick) this.applyQuality();
     else if (pick.upgrade) {
-      console.info('[player] started on', `${act.height}p${Math.round(act.frameRate || 0)} ${act.videoCodec} ${act.audioCodec}`);
       // playing at 480p: go up to the chosen quality as soon as the picture moves
       const up = () => { if (token === this.loadToken) { console.info('[player] upgrade to', pick.target.height + 'p'); this.applyQuality(2); } };
       if (this.video.currentTime > 0.2 && !this.video.paused) up();
       else this.video.addEventListener('playing', up, { once: true });
     }
-    else console.info('[player] started on', `${act.height}p${Math.round(act.frameRate || 0)} ${act.videoCodec} ${act.audioCodec}`);
     this.video.playbackRate = settings.get('speed');
     if (settings.get('captions')) this.setCaptions(settings.get('captions'));
     this.video.play().catch(() => { /* autoplay */ });
@@ -520,7 +537,30 @@ export class Player {
     setTimeout(() => this.drawInfo(), 300);
   }
 
+  /** Automatic quality: on in settings and not overridden by a manual pick for this video. Live keeps auto too. */
+  isAuto() { return settings.get('autoQ') !== false && !this.manual; }
+
+  /** Lets Shaka's ABR pick the quality from the measured speed, capped by the max-quality setting. */
+  enableAuto() {
+    const q = settings.get('quality'); const fps = settings.get('fps');
+    this.shaka.configure({
+      abr: {
+        enabled: true,
+        useNetworkInformation: false, // webOS/Chromium's navigator.connection figure is not the real speed
+        switchInterval: 2, // first upgrade ~2-3 s after start on a good connection
+        bandwidthUpgradeTarget: 0.7, // go up only with 30% headroom (slow, uneven connections)
+        bandwidthDowngradeTarget: 0.9,
+        clearBufferSwitch: false, // play out what is buffered, new quality follows: no stall on switch
+        restrictions: {
+          maxHeight: q === 'max' || q === 'auto' ? Infinity : Number(q),
+          maxFrameRate: fps === 'max' ? Infinity : Number(fps) + 0.5
+        }
+      }
+    });
+  }
+
   applyQuality(margin) {
+    if (this.isAuto()) { this.enableAuto(); return; }
     let q = settings.get('quality');
     if (q === 'auto') { settings.set('quality', 'max'); q = 'max'; }
     let formats = this.videoFormats();
@@ -562,7 +602,12 @@ export class Player {
     this.autoFix = (this.autoFix || 0) + 1;
     console.warn('[player] auto reselect quality, try', this.autoFix);
     const t = this.video.currentTime;
-    this.applyQuality();
+    if (this.isAuto()) {
+      const act = this.shaka.getVariantTracks().find((v) => v.active);
+      this.shaka.configure({ abr: { enabled: false } });
+      if (act) this.shaka.selectVariantTrack(act, true, 2);
+      setTimeout(() => { if (this.isAuto()) this.enableAuto(); }, 1500);
+    } else this.applyQuality();
     setTimeout(() => {
       if (t > 0 && Math.abs(this.video.currentTime - t) > 2) this.video.currentTime = t;
       this.video.play().catch(() => { /* ignore */ });
@@ -870,7 +915,6 @@ export class Player {
   qualityMenu() {
     const formats = this.videoFormats();
     const active = this.shaka.getVariantTracks().find((t) => t.active);
-    const abr = this.shaka.getConfiguration?.().abr?.enabled;
     const opts = [];
     if (!formats.length) opts.push({ label: 'الفيديو ما تحمّل — افتح سجل الأخطاء', value: 'logs' });
     // one entry per resolution/fps like the official app; the best codec for it is chosen automatically
@@ -882,10 +926,13 @@ export class Player {
       if (!groups.has(gKey(t))) groups.set(gKey(t), t);
     }
     const activeG = active ? gKey(active) : '';
+    if (settings.get('autoQ') !== false) {
+      opts.push({ label: 'تلقائي حسب سرعة الإنترنت', hint: active ? active.height + 'p' : '', value: 'auto', on: !this.manual });
+    }
     for (const t of groups.values()) {
       const hdr = t.hdr && t.hdr !== 'SDR' ? ' HDR' : '';
       const fpsTxt = Math.round(t.frameRate || 0) > 30 ? String(Math.round(t.frameRate)) : '';
-      opts.push({ label: `${t.height}p${fpsTxt}${hdr}`, hint: codecOf(active && gKey(active) === gKey(t) ? active : t), value: t, on: !abr && gKey(t) === activeG });
+      opts.push({ label: `${t.height}p${fpsTxt}${hdr}`, hint: codecOf(active && gKey(active) === gKey(t) ? active : t), value: t, on: (this.manual || settings.get('autoQ') === false) && gKey(t) === activeG });
     }
     opts.push({ label: this.statsTimer ? 'إخفاء الإحصائيات' : 'عرض الإحصائيات', value: 'stats' });
     opts.push({ label: 'سجل الأخطاء', value: 'logs' });
@@ -893,9 +940,11 @@ export class Player {
       if (v === 'preset') { setTimeout(() => this.presetMenu(), 0); return; }
       if (v === 'stats') { this.toggleStats(); return; }
       if (v === 'logs') { window.__ytlgLogs?.(); return; }
-      if (v === 'auto') { this.shaka.configure({ abr: { enabled: true } }); this.resumeAfterMenu(); return; }
-      // this video only (the start preset stays as it is)
+      if (v === 'auto') { this.manual = false; this.enableAuto(); toast('الجودة تلقائية حسب سرعة الإنترنت', 2500); this.resumeAfterMenu(); return; }
+      // manual pick: fixed for this video only (no automatic drop), the settings stay as they are
+      this.manual = true;
       this.selectFormat(v);
+      toast('الجودة ثابتة على ' + v.height + 'p لهذا الفيديو', 2500);
       this.resumeAfterMenu();
     });
   }

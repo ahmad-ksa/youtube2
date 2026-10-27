@@ -54,9 +54,14 @@ class Botguard {
   coldStart(binding) { return createColdStartToken(binding); }
 
   async mint(binding) {
+    const t = performance.now();
     if (!this.ready) await this.init();
     if (!this.minter) return undefined;
-    try { return await this.minter.mintAsWebsafeString(binding); } catch (e) {
+    try {
+      const tok = await this.minter.mintAsWebsafeString(binding);
+      console.info('[time] PoToken', Math.round(performance.now() - t) + ' ms');
+      return tok;
+    } catch (e) {
       console.warn('[BotGuard] mint failed, reinit', e);
       this.minter = null;
       await this.init();

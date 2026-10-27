@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سجل YouTube LG</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f6f6; --fg: #111; --card: #fff; --line: #ddd; --err: #c62828; --warn: #b26a00; --accent: #e00; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f0f0f; --fg: #eee; --card: #1b1b1b; --line: #333; --err: #ff6b6b; --warn: #ffb74d; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { position: sticky; top: 0; display: flex; gap: 8px; align-items: center; padding: 12px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
+  h1 { font-size: 17px; margin: 0; flex: 1; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; }
+  pre { margin: 0; padding: 12px 16px 40px; white-space: pre-wrap; word-break: break-word; font: 12.5px/1.55 ui-monospace, Menlo, Consolas, monospace; direction: ltr; text-align: left; }
+  .E { color: var(--err); } .W { color: var(--warn); }
+  .msg { padding: 24px 16px; }
+</style>
+</head>
+<body>
+<header><h1>سجل YouTube LG</h1><button id="copy" hidden>نسخ</button></header>
+<pre id="log"></pre>
+<div class="msg" id="msg" hidden></div>
+<script>
+(async () => {
+  const msg = (t) => { const m = document.getElementById('msg'); m.textContent = t; m.hidden = false; };
+  const data = location.hash.slice(1);
+  if (!data) return msg('لا يوجد سجل في هذا الرابط. صوّر رمز QR من شاشة السجل في التطبيق.');
+  try {
+    const b64 = data.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((data.length + 3) % 4);
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    const text = await new Response(stream).text();
+    const pre = document.getElementById('log');
+    for (const line of text.split('\n')) {
+      const div = document.createElement('div');
+      div.textContent = line;
+      if (line.startsWith('[E]')) div.className = 'E'; else if (line.startsWith('[W]')) div.className = 'W';
+      pre.appendChild(div);
+    }
+    const btn = document.getElementById('copy');
+    btn.hidden = false;
+    btn.onclick = async () => {
+      try { await navigator.clipboard.writeText(text); btn.textContent = 'تم النسخ ✓'; }
+      catch { const r = document.createRange(); r.selectNodeContents(pre); getSelection().removeAllRanges(); getSelection().addRange(r); btn.textContent = 'محدد — انسخ يدويًا'; }
+    };
+  } catch (e) {
+    msg('تعذّر فك السجل: ' + e.message);
+  }
+})();
+</script>
+</body>
+</html>
