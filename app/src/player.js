@@ -507,6 +507,12 @@ export class Player {
     const vk = Player.vKey(videoTrack);
     let cands = all.filter((t) => Player.vKey(t) === vk);
     if (active?.language) cands = cands.filter((t) => t.language === active.language).length ? cands.filter((t) => t.language === active.language) : cands;
+    // keep the audio codec that is already playing: switching AAC <-> Opus mid-stream breaks SABR (Shaka 3008)
+    const fam = (t) => (t.audioCodec || '').split('.')[0];
+    if (!audioKey && active?.audioCodec) {
+      const same = cands.filter((t) => fam(t) === fam(active));
+      if (same.length) cands = same;
+    }
     const wantA = audioKey || settings.get('audioFmt');
     const exact = wantA && wantA !== 'best' ? cands.find((t) => Player.aKey(t) === wantA) : null;
     const pick = exact || cands.sort((a, b) => (b.audioBandwidth || 0) - (a.audioBandwidth || 0))[0];
