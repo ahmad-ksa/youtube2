@@ -322,6 +322,7 @@ export class Player {
     this.sabr?.dispose();
     this.sabr = null;
     this.lastSaved = -1;
+    this.reloadTimes = [];
     if (opts.reloadCtx !== undefined || opts.at !== undefined) setTimeout(() => { this.reopening = false; }, 0); // old session is gone
 
     const { info, cpn, client } = await this.fetchPlayer(videoId, only || (opts.reloadCtx ? this.client : undefined), opts.reloadCtx);
@@ -379,9 +380,17 @@ export class Player {
         if (!poToken) mint();
         return poToken || botguard.coldStart(binding) || '';
       });
-      this.sabr.onReloadPlayerResponse(async (reloadContext) => {
-        // like SmartTube: get a fresh player response for the new session and reopen the video at the same second
-        this.reopen(videoId, token, reloadContext, 'reload');
+      const sabr = this.sabr;
+      let reloading = null;
+      this.sabr.onReloadPlayerResponse((reloadContext) => {
+        // The adapter awaits this and then retries the same request, so the new session must be applied to this
+        // adapter in place before returning. (Reopening the video instead returned at once, the adapter retried
+        // with the old URL and YouTube asked again every 2 s: an endless reload loop.)
+        if (!reloading) {
+          reloading = this.refreshSession(sabr, videoId, token, reloadContext)
+            .finally(() => { reloading = null; });
+        }
+        return reloading;
       });
       this.sabr.attach(this.shaka);
       if (sd.server_abr_streaming_url) {
@@ -559,6 +568,36 @@ export class Player {
       this.video.play().catch(() => { /* ignore */ });
     }, 300);
     return true;
+  }
+
+  /**
+   * Server asked for a new playback session (SABR reloadPlaybackContext): fetch a fresh player response with the
+   * reload token and hand its streaming URL + ustreamer config to the running adapter. Playback is not interrupted.
+   * Falls back to reopening the video if the refresh fails or YouTube keeps asking (more than 5 times a minute).
+   */
+  async refreshSession(sabr, videoId, token, reloadContext) {
+    const now = Date.now();
+    this.reloadTimes = (this.reloadTimes || []).filter((t) => now - t < 60000);
+    this.reloadTimes.push(now);
+    if (this.reloadTimes.length > 5) {
+      console.warn('[player] server keeps asking for reload — reopening');
+      this.reloadTimes = [];
+      this.reopen(videoId, token, reloadContext, 'reload loop');
+      return;
+    }
+    try {
+      const { info } = await this.fetchPlayer(videoId, this.client, reloadContext);
+      if (token !== this.loadToken || sabr !== this.sabr) return; // user moved on
+      const sd = info.streaming_data;
+      if (!sd?.server_abr_streaming_url) throw new Error('no SABR url in reload response');
+      sabr.setStreamingURL(await yt.tube.session.player.decipher(sd.server_abr_streaming_url));
+      const cfg = info.player_config?.media_common_config?.media_ustreamer_request_config?.video_playback_ustreamer_config;
+      if (cfg) sabr.setUstreamerConfig(cfg);
+      console.info('[player] session refreshed in place', this.reloadTimes.length);
+    } catch (e) {
+      console.warn('[player] session refresh failed — reopening', e?.message);
+      if (token === this.loadToken && sabr === this.sabr) this.reopen(videoId, token, reloadContext, 'reload');
+    }
   }
 
   /** Reopen the current video from the same second with a fresh session (max 3 per video). */
