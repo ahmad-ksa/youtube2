@@ -1,0 +1,6 @@
+node_modules/
+app/dist/
+app/test/*.out.js
+app/test/fix.js
+out/
+*.ipk

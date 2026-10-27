@@ -1,0 +1,29 @@
+name: tvtest
+on:
+  workflow_dispatch:
+    inputs:
+      vid: { description: 'video id', default: 'XvRNIX30tO8' }
+      channel: { description: 'browser channel (chrome or empty)', default: 'chrome' }
+permissions:
+  contents: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci || npm install
+        working-directory: app
+      - run: node build.mjs
+        working-directory: app
+      - run: npm i --no-save playwright@1.48.2 && npx playwright install chromium
+      - run: node tools/tvtest.cjs
+        env: { VID: '${{ inputs.vid }}', CHANNEL: '${{ inputs.channel }}' }
+      - name: publish results to branch tvtest-results
+        if: always()
+        run: |
+          mkdir -p /tmp/res && cp tvtest.log shot*.png /tmp/res/ 2>/dev/null || true
+          git config user.name ci && git config user.email ci@users.noreply.github.com
+          git checkout --orphan tvtest-results && git rm -rqf . && cp /tmp/res/* . && git add -A && git commit -qm "tvtest ${{ github.run_id }}" && git push -f origin tvtest-results

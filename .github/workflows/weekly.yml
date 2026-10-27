@@ -1,0 +1,128 @@
+name: Build & auto-update
+
+# Daily: update the YouTube libraries (youtubei.js / googlevideo / bgutils-js / shaka 4.x).
+# A new release is published only when something changed (or on push / manual run).
+# Weekly: check SmartTube for a new release and open an issue with its changelog.
+on:
+  schedule:
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Build even if nothing changed'
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: ['app/**', '.github/workflows/weekly.yml']
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci || npm install
+
+      - name: Update YouTube libraries
+        id: upd
+        run: |
+          npm install --save youtubei.js@latest googlevideo@latest bgutils-js@latest shaka-player@4 --no-audit --no-fund
+          if git diff --quiet -- package.json package-lock.json; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+          npm ls youtubei.js googlevideo bgutils-js shaka-player --depth=0 || true
+
+      - name: Decide
+        id: go
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ inputs.force }}" = "true" ] || [ "${{ steps.upd.outputs.changed }}" = "true" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build ipk
+        if: steps.go.outputs.build == 'true'
+        id: build
+        run: |
+          base=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
+          v="$base.${{ github.run_number }}"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          APP_VERSION=$v node build.mjs
+          mkdir -p ../out
+          npx ares-package -n dist -o ../out
+          ls -la ../out
+          node tools/repo.mjs ../out/youtube.leanback.v4_${v}_all.ipk ../out/repo
+          cp ../icon.png ../out/repo/
+
+      - name: Commit updated libraries
+        if: steps.go.outputs.build == 'true' && steps.upd.outputs.changed == 'true'
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add package.json package-lock.json
+          git commit -m "chore: update YouTube libraries [skip ci]"
+          git push
+
+      - name: Release
+        if: steps.go.outputs.build == 'true'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ steps.build.outputs.version }}
+          name: YouTube LG v${{ steps.build.outputs.version }}
+          commit: main
+          makeLatest: true
+          body: |
+            تحديث تلقائي لتطبيق YouTube LG.
+            ثبّت الملف `.ipk` أو حدّث من Homebrew Channel.
+          artifacts: 'out/*.ipk'
+
+      - name: Publish Homebrew repo branch
+        if: steps.go.outputs.build == 'true'
+        working-directory: out/repo
+        run: |
+          git init -q -b repo
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add -A
+          git commit -qm "repo v${{ steps.build.outputs.version }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" repo
+
+      - name: Report failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue create -R ${{ github.repository }} -t "فشل البناء (run ${{ github.run_number }})" -b "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" || true
+
+  smarttube-watch:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'push'
+    steps:
+      - name: Check SmartTube releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(curl -fsSL https://api.github.com/repos/yuliskov/SmartTube/releases/latest | jq -r .tag_name)
+          [ -n "$tag" ] && [ "$tag" != "null" ] || exit 0
+          if gh issue list -R ${{ github.repository }} --state all --search "SmartTube $tag in:title" --json number -q '.[0].number' | grep -q .; then
+            echo "already tracked: $tag"; exit 0
+          fi
+          body=$(curl -fsSL https://api.github.com/repos/yuliskov/SmartTube/releases/latest | jq -r '.body' | head -c 50000)
+          gh issue create -R ${{ github.repository }} -t "SmartTube $tag صدر" -b "إصدار جديد من SmartTube: https://github.com/yuliskov/SmartTube/releases/tag/$tag
+
+          $body"
