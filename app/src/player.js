@@ -5,6 +5,7 @@ import { SabrStreamingAdapter } from 'googlevideo/sabr-streaming-adapter';
 import { buildSabrFormat } from 'googlevideo/utils';
 import { ShakaPlayerAdapter } from './ShakaPlayerAdapter.ts';
 import { botguard } from './botguard.js';
+import { openInYouTube } from './tvmode.js';
 import { yt } from './yt.js';
 import { settings, history, favorites, resume, PRESETS, presetValue, presetLabel, setPreset } from './store.js';
 import { sponsorblock } from './sponsorblock.js';
@@ -236,6 +237,12 @@ export class Player {
   ms() { return Math.round(performance.now() - this.t0); }
 
   async open(item, queue, isBack) {
+    if (settings.get('playerMode') !== 'app' && item?.id) {
+      // YouTube's own TV player plays it (like YouTube AdFree); we come back here on exit
+      history.add({ id: item.id, title: item.title || '', sub: item.sub || '', channelId: item.channelId || '', duration: item.duration, thumb: item.thumb });
+      openInYouTube(item, { nav: this.app.currentNav });
+      return;
+    }
     const token = ++this.loadToken;
     this.t0 = performance.now();
     if (!isBack && this.item && this.app.isTop(this) && this.item.id !== item.id) (this.prevStack ||= []).push(this.item);

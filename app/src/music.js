@@ -109,12 +109,15 @@ const KINDS = {
   arab: { artists: ARAB_ARTISTS, discover: ARAB_DISCOVER, albumWord: 'ألبوم', accept: (it) => ARABIC.test(it.title) },
   world: { artists: WORLD_ARTISTS, discover: WORLD_DISCOVER, albumWord: 'album', accept: (it) => !ARABIC.test(it.title) }
 };
-const memo = {}; // kind -> { at, data } — 30 min, so going back and forth is instant
+// kind -> { at, items }: 30 min in session storage, so coming back from a video is instant (no new searches)
+const memoGet = (k) => { try { return JSON.parse(sessionStorage.getItem('ytlg.music.' + k) || 'null'); } catch { return null; } };
+const memoSet = (k, v) => { try { sessionStorage.setItem('ytlg.music.' + k, JSON.stringify(v)); } catch { /* full */ } };
 
 /** Music page data: kind 'arab' (الموسيقى العربية) or 'world' (الموسيقى الأجنبية). */
 export async function musicPage(kind, { fresh } = {}) {
   const cfg = KINDS[kind];
-  if (!fresh && memo[kind] && Date.now() - memo[kind].at < 30 * 60e3) return memo[kind].data;
+  const m = memoGet(kind);
+  if (!fresh && m && Date.now() - m.at < 30 * 60e3) return { shelves: [{ title: '', items: m.items }], items: m.items, continuation: null };
   const cache = idCache();
   const [fixed, found] = await Promise.all([
     pool(cfg.artists, 5, (n) => resolveArtist(n, cache)).then((r) => { saveIds(cache); return r.filter(Boolean); }),
@@ -141,7 +144,7 @@ export async function musicPage(kind, { fresh } = {}) {
   const out = [...songs, ...albums].filter(Boolean);
   out.sort((a, b) => a.age - b.age);
   const data = { shelves: [{ title: '', items: out }], items: out, continuation: null };
-  memo[kind] = { at: Date.now(), data };
+  memoSet(kind, { at: Date.now(), items: out });
   return data;
 }
 

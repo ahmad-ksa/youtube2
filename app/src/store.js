@@ -5,6 +5,7 @@ const DEFAULTS = {
   gl: 'SA',
   quality: 1080, // start quality: 'max' | 4320 | 2160 | 1440 | 1080 | 720 | 480
   codec: 'auto', // 'auto' | 'av01' | 'vp9' | 'avc1'
+  playerMode: 'official', // 'official' = YouTube's own TV player (most reliable) | 'app' = this app's player
   autoQ: true, // quality follows the connection (up and down) up to 'quality'; a manual pick locks it for that video
   startQ: 480, // start stream height for a fast start (480 | 720 | 0 = start directly at the target quality)
   hdrOn: false, // HDR off by default: webOS may reject HDR streams when the HDR config lookup is unavailable

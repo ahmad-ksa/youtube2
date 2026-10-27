@@ -163,12 +163,12 @@ function personal() {
 }
 
 /** A paged, date-sorted feed: next() returns the next (older) window's videos, newest first, or null. */
-function feed({ kind, queries, perQuery, sort, perChannel, rule, excludePersonal }) {
-  let w = 0; let qi = 0;
-  const seenVid = new Set(); const perCh = new Map();
+function feed({ kind, queries, perQuery, sort, perChannel, rule, excludePersonal }, start = {}) {
+  let w = start.w || 0; let qi = 0;
+  const seenVid = new Set(start.seen || []); const perCh = new Map();
   const own = excludePersonal ? personal() : null;
   const pool = shuffle(queries.slice());
-  return async function next() {
+  const next = async function () {
     if (w >= WINDOWS.length) return null;
     const win = WINDOWS[w++];
     const take = []; for (let k = 0; k < perQuery; k++) take.push(pool[(qi++) % pool.length]);
@@ -188,52 +188,74 @@ function feed({ kind, queries, perQuery, sort, perChannel, rule, excludePersonal
     out.sort((a, b) => a.age - b.age);
     return out;
   };
+  next.window = () => w; // next window to fetch (for the saved cache)
+  return next;
 }
 
-const listCache = new Map(); // query pool -> { at, data }: reopening a list within 45 min sends no new searches
+// Lists are kept in the TV's session storage for 45 min: coming back from a video (which reloads our page)
+// shows them instantly with no new searches. The refresh button asks for fresh results.
+const LIST_TTL = 45 * 60e3;
+const loadList = (name) => { try { return JSON.parse(sessionStorage.getItem('ytlg.list.' + name) || 'null'); } catch { return null; } };
+const saveList = (name, v) => { try { sessionStorage.setItem('ytlg.list.' + name, JSON.stringify(v)); } catch { /* full */ } };
 
-async function paged(opts, fresh) {
-  const hit = listCache.get(opts.queries);
-  if (!fresh && hit && Date.now() - hit.at < 45 * 60e3) return hit.data;
-  if (botPaused()) throw new Error('متوقف مؤقتًا لأن يوتيوب طلب التحقق من أنك لست روبوتاً — حاول بعد نصف ساعة');
-  const data = await pagedFresh(opts);
-  if (data.items.length) listCache.set(opts.queries, { at: Date.now(), data });
-  return data;
-}
-
-async function pagedFresh(opts) {
-  const next = feed(opts);
-  let items = await next();
-  while (items && !items.length) items = await next();
+function withMore(opts, items, next) {
   return {
-    shelves: [{ title: '', items: items || [] }], items: items || [], continuation: null,
+    shelves: [{ title: '', items }], items, continuation: null,
     more: async () => {
       let r = await next();
       while (r && !r.length) r = await next();
+      if (r) { // keep the saved copy in step with what is on screen
+        const saved = loadList(opts.name);
+        if (saved) saveList(opts.name, { ...saved, items: saved.items.concat(r), w: next.window() });
+      }
       return r ? { items: r, done: false } : { items: [], done: true };
     }
   };
 }
 
+async function paged(opts, fresh) {
+  const hit = loadList(opts.name);
+  if (!fresh && hit && Date.now() - hit.at < LIST_TTL && hit.items?.length) {
+    // resume the feed after what was already shown
+    const next = feed(opts, { w: hit.w, seen: hit.items.map((i) => i.id) });
+    return withMore(opts, hit.items, next);
+  }
+  if (botPaused()) throw new Error('متوقف مؤقتًا لأن يوتيوب طلب التحقق من أنك لست روبوتاً — حاول بعد نصف ساعة');
+  const next = feed(opts);
+  let items = await next();
+  while (items && !items.length) items = await next();
+  items = items || [];
+  if (items.length) saveList(opts.name, { at: Date.now(), items, w: next.window() });
+  return withMore(opts, items, next);
+}
+
 /** استكشف العالم: Europe, the Americas, Russia, Korea — no South Asia / Philippines, no adult content. */
-export const exploreWorld = (fresh) => paged({ kind: 'world', queries: WORLD_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.world, excludePersonal: true }, fresh);
+export const exploreWorld = (fresh) => paged({ name: 'exploreWorld',  kind: 'world', queries: WORLD_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.world, excludePersonal: true }, fresh);
 /** استكشف العرب: every Arab country, Arabic content only. */
-export const exploreArab = (fresh) => paged({ kind: 'arab', queries: ARAB_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.arab, excludePersonal: true }, fresh);
+export const exploreArab = (fresh) => paged({ name: 'exploreArab',  kind: 'arab', queries: ARAB_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.arab, excludePersonal: true }, fresh);
 /** تريند العالم: most-watched uploads worldwide (YouTube retired its Trending page in 2025). */
-export const trendWorld = (fresh) => paged({ kind: 'world', queries: WORLD_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.worldTrend }, fresh);
+export const trendWorld = (fresh) => paged({ name: 'trendWorld',  kind: 'world', queries: WORLD_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.worldTrend }, fresh);
 /** تريند الأغاني العالمي: most-watched songs worldwide right now. */
-export const trendMusic = (fresh) => paged({ kind: 'world', queries: MUSIC_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.worldTrend }, fresh);
+export const trendMusic = (fresh) => paged({ name: 'trendMusic',  kind: 'world', queries: MUSIC_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.worldTrend }, fresh);
 /** استكشف السعودية / الترند السعودي: Saudi YouTube (region SA), Saudi subjects, other countries filtered out. */
-export const exploreSaudi = (fresh) => paged({ kind: 'gl:SA', queries: SAUDI_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.saudi, excludePersonal: true }, fresh);
-export const trendSaudi = (fresh) => paged({ kind: 'gl:SA', queries: SAUDI_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.saudi }, fresh);
+export const exploreSaudi = (fresh) => paged({ name: 'exploreSaudi',  kind: 'gl:SA', queries: SAUDI_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.saudi, excludePersonal: true }, fresh);
+export const trendSaudi = (fresh) => paged({ name: 'trendSaudi',  kind: 'gl:SA', queries: SAUDI_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.saudi }, fresh);
 /** استكشف الخليج / ترند الخليج: the six GCC countries, each search run in one of their own YouTube regions. */
-export const exploreGulf = (fresh) => paged({ kind: GULF_SESSIONS, queries: GULF_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.gulf, excludePersonal: true }, fresh);
-export const trendGulf = (fresh) => paged({ kind: GULF_SESSIONS, queries: GULF_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.gulf }, fresh);
+export const exploreGulf = (fresh) => paged({ name: 'exploreGulf',  kind: GULF_SESSIONS, queries: GULF_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.gulf, excludePersonal: true }, fresh);
+export const trendGulf = (fresh) => paged({ name: 'trendGulf',  kind: GULF_SESSIONS, queries: GULF_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.gulf }, fresh);
 /** الترند العربي: most-watched Arabic uploads. */
-export const trendArab = (fresh) => paged({ kind: 'arab', queries: ARAB_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.arab }, fresh);
+export const trendArab = (fresh) => paged({ name: 'trendArab',  kind: 'arab', queries: ARAB_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.arab }, fresh);
 
 /** News / Gaming: YouTube's topic page plus this week's uploads, ONE list sorted by date, newest first. */
 export async function topicByDate(key) {
+  const hit = loadList('topic.' + key);
+  if (hit && Date.now() - hit.at < LIST_TTL && hit.items?.length) return { shelves: [{ title: '', items: hit.items }], items: hit.items, continuation: null };
+  const data = await topicByDateFresh(key);
+  if (data.items.length) saveList('topic.' + key, { at: Date.now(), items: data.items });
+  return data;
+}
+
+async function topicByDateFresh(key) {
   const extra = {
     news: ['أخبار', 'عاجل', 'news today'],
     gaming: ['gameplay', 'ألعاب فيديو', 'تختيم']

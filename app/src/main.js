@@ -1,6 +1,9 @@
 // User script: webOS injects this into the page the app navigates to (https://www.youtube.com/robots.txt),
 // so every request runs same-origin with youtube.com. We then replace the page with our own TV UI.
 import css from './styles.css';
+import { tvMode } from './tvmode.js';
+import { settings } from './store.js';
+import { focus } from './nav.js';
 import qrcode from 'qrcode-generator';
 
 // webOS' browser throws "Illegal invocation" if fetch is called with a foreign `this`.
@@ -141,12 +144,27 @@ async function start() {
     document.addEventListener('keydown', (ev) => { if (ev.keyCode === 13) location.reload(); }, { once: true });
     return;
   }
-  botguard.init();
-  setTimeout(() => app.player.preload?.(), 1500); // warm up YouTube's TV player in the background
+  // our own player needs BotGuard; with YouTube's player (default) it is not used, so no extra requests
+  if (settings.get('playerMode') === 'app') botguard.init();
   document.getElementById('splash')?.remove();
-  checkUpdate();
 
-  app.go('home');
+  // back from YouTube's TV player: reopen the page we left and put the focus on the video that was played
+  const back = /[#&]back=1/.test(location.hash);
+  let ret = null;
+  if (back) {
+    try { ret = JSON.parse(sessionStorage.getItem('ytlg.return') || 'null'); } catch { ret = null; }
+    try { history.replaceState(null, '', HOME + '#ytlg'); } catch { /* ignore */ }
+  } else checkUpdate();
+  app.go(ret?.nav || 'home');
+  if (ret?.id) {
+    const t0 = Date.now();
+    const find = setInterval(() => {
+      const card = [...document.querySelectorAll('.page .card')].find((c) => app.cardData.get(c)?.id === ret.id);
+      if (card) { focus(card); clearInterval(find); } else if (Date.now() - t0 > 8000) clearInterval(find);
+    }, 200);
+  }
+  if (back) return; // launch parameters were already handled when the app started
+
   const lp = window.PalmSystem?.launchParams;
   const vid = launchVideo(lp) || videoIdFrom(location.hash);
   const q0 = launchQuery(lp) || (location.hash.match(/[#&]q=([^&]+)/) ? decodeURIComponent(location.hash.match(/[#&]q=([^&]+)/)[1]) : null);
@@ -165,8 +183,12 @@ async function start() {
   if (window.top !== window) return; // YouTube TV player iframe: leave it alone
   if (window.__ytlgBooted) return;
   window.__ytlgBooted = true;
+  if (location.hostname === 'www.youtube.com' && location.pathname === '/tv') {
+    // official player mode: YouTube's own TV app plays the video; we only strip ads / return on exit
+    tvMode(); // synchronously: the ad hook must be in place before YouTube's own scripts run
+    return;
+  }
   if (location.hostname !== 'www.youtube.com' || location.pathname !== '/robots.txt') {
-    // e.g. landed on /tv: hop to the bare same-origin page we own.
     if (/youtube\.com$/.test(location.hostname)) location.replace(HOME + location.hash);
     return;
   }
