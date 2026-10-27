@@ -1,6 +1,7 @@
 // Main TV UI: sidebar + pages of rows/grids, layer stack, remote key routing.
 import { yt, TOPICS } from './yt.js';
 import { exploreWorld, exploreArab, trendWorld, trendArab, topicByDate } from './discover.js';
+import { arabicMusic } from './music.js';
 import { dearrow } from './dearrow.js';
 import { Player } from './player.js';
 import { settings, history, favorites, searches, PRESETS, presetLabel, presetValue, setPreset } from './store.js';
@@ -22,6 +23,7 @@ const NAV = [
   ['channels', '👥', 'القنوات'],
   ['history', '🕘', 'السجل'],
   ['library', '📚', 'المكتبة'],
+  ['arabMusic', '🎶', 'الموسيقى العربية'],
   ['music', '🎵', 'موسيقى'],
   ['gaming', '🎮', 'ألعاب'],
   ['news', '📰', 'أخبار'],
@@ -41,7 +43,7 @@ export class App {
     this.root = h(`<div id="app">
       <aside class="sidebar layer-part">
         <div class="brand">YouTube <b>LG</b></div>
-        <nav>${NAV.map(([id, icon, label]) => `<button class="f nav-item" data-nav="${id}"><span class="ic">${icon}</span><span class="lb">${label}</span></button>`).join('')}</nav>
+        <nav class="nav-scroll">${NAV.map(([id, icon, label]) => `<button class="f nav-item" data-nav="${id}"><span class="ic">${icon}</span><span class="lb">${label}</span></button>`).join('')}</nav>
       </aside>
       <main class="content scroll-y"><div class="page-head"></div><div class="page"></div><div class="loading"><i></i></div></main>
       <div class="modal"><div class="box"><div class="m-title"></div><div class="m-body"></div><div class="m-items scroll-y"></div></div></div>
@@ -221,6 +223,14 @@ export class App {
         }[id];
         this.open({ title: P[0], head: `<h1>${P[0]}</h1><div class="head-note">${P[1]} — من الأحدث إلى الأقدم</div>`,
           load: () => P[2](), mode: 'grid', emptyText: 'تعذّر جلب الفيديوهات، جرّب التحديث' });
+        break;
+      }
+      case 'arabMusic': {
+        const pg = { title: 'الموسيقى العربية', head: '<h1>الموسيقى العربية</h1><div class="head-note">أحدث أغنية وأحدث ألبوم من كل مطرب — من الأحدث إلى الأقدم</div>',
+          mode: 'grid', emptyText: 'تعذّر جلب الأغاني، جرّب التحديث' };
+        // the sidebar "refresh" button reloads with fresh data instead of the 30-min cache
+        pg.load = () => { const fresh = pg.loaded; pg.loaded = true; return arabicMusic({ fresh }); };
+        this.open(pg);
         break;
       }
       case 'highlights':

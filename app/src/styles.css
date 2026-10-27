@@ -22,8 +22,9 @@ img { display: block; }
 .sidebar.open .brand::before { display: none; }
 .sidebar .brand { text-align: center; }
 .sidebar .brand b { padding: 0 10px; border-radius: 8px; }
-.sidebar nav { display: flex; flex-direction: column; gap: 4px; }
-.nav-item { display: flex; align-items: center; gap: 18px; padding: 11px 26px; border-radius: 40px; font-size: 26px; color: #ddd; }
+.sidebar nav { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: none; padding-bottom: 60px; }
+.sidebar nav::-webkit-scrollbar { display: none; }
+.nav-item { flex: none; display: flex; align-items: center; gap: 18px; padding: 11px 26px; border-radius: 40px; font-size: 26px; color: #ddd; }
 .nav-item .ic { width: 40px; text-align: center; font-size: 30px; }
 .nav-item.on { color: #fff; background: #222; }
 .nav-item.on .ic { color: var(--red); }

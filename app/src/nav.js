@@ -77,7 +77,8 @@ export function reveal(el) {
     if (e.left < r.left + pad) row.scrollLeft -= (r.left + pad - e.left);
     else if (e.right > r.right - pad) row.scrollLeft += (e.right - (r.right - pad));
   }
-  const page = el.closest('.scroll-y');
+  // pages and the sidebar's list both scroll so the focused item stays on screen
+  const page = el.closest('.scroll-y, .nav-scroll');
   if (page) {
     const r = page.getBoundingClientRect(), e = el.getBoundingClientRect();
     const pad = 80;

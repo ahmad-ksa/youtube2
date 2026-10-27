@@ -152,18 +152,28 @@ class YT {
    * "UULF" playlist (uploads without Shorts). Same origin, no extra permissions.
    */
   async rss(channelId) {
-    const res = await boundFetch(`/feeds/videos.xml?playlist_id=UULF${channelId.slice(2)}`);
+    const { entries } = await this.rssFeed(`playlist_id=UULF${channelId.slice(2)}`);
+    return entries.map((e) => ({ ...e, channelId }));
+  }
+
+  /** An album / playlist feed: { owner, entries } (owner = the feed's author, e.g. "Singer - Topic"). */
+  rssPlaylist(playlistId) { return this.rssFeed(`playlist_id=${playlistId}`); }
+
+  async rssFeed(query) {
+    const res = await boundFetch(`/feeds/videos.xml?${query}`);
     if (!res.ok) throw new Error('rss ' + res.status);
     const xml = await res.text();
     const tag = (e, t) => (e.match(new RegExp(`<${t}[^>]*>([\\s\\S]*?)</${t}>`)) || [])[1] || '';
     const un = (x) => x.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
-    const out = [];
+    const entries = [];
     for (const e of xml.match(/<entry>[\s\S]*?<\/entry>/g) || []) {
       const id = tag(e, 'yt:videoId'); const at = Date.parse(tag(e, 'published'));
       if (!id || !at || /\/shorts\//.test(e)) continue;
-      out.push({ type: 'video', id, title: un(tag(e, 'title')), sub: un(tag(tag(e, 'author'), 'name')), channelId, publishedAt: at, meta: '', thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, duration: '' });
+      entries.push({ type: 'video', id, title: un(tag(e, 'title')), sub: un(tag(tag(e, 'author'), 'name')), publishedAt: at, meta: '', thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, duration: '' });
     }
-    return out;
+    const head = xml.split('<entry>')[0];
+    const owner = un(tag(tag(head, 'author'), 'name')) || entries[0]?.sub || '';
+    return { owner, entries };
   }
 
   /**
