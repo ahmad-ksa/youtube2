@@ -4,7 +4,7 @@
 // Searches run in separate guest sessions with YouTube's Restricted Mode on (filters mature content),
 // so they are not personalised by the signed-in account either.
 import { Innertube } from 'youtubei.js/web';
-import { yt, ageOf, itemAge, boundFetch } from './yt.js';
+import { yt, ageOf, itemAge, boundFetch, searchGate, botPaused } from './yt.js';
 import { extract } from './extract.js';
 import { settings, history, favorites } from './store.js';
 
@@ -139,11 +139,12 @@ function session(kind) {
 }
 
 async function search(kind, query, sp) {
+  if (botPaused()) return [];
   try {
     const tube = await session(kind);
-    const data = tube
+    const data = await searchGate(async () => (tube
       ? (await tube.actions.execute('/search', { query, params: sp, client: 'WEB', parse: false })).data
-      : await yt.raw('/search', { query, params: sp, client: 'WEB' });
+      : await yt.raw('/search', { query, params: sp, client: 'WEB' })));
     return extract(data, { noShorts: true }).items.filter((i) => i.type === 'video' && !i.live && !i.short);
   } catch (e) { console.warn('[discover]', query, e?.message); return []; }
 }
@@ -189,7 +190,18 @@ function feed({ kind, queries, perQuery, sort, perChannel, rule, excludePersonal
   };
 }
 
-async function paged(opts) {
+const listCache = new Map(); // query pool -> { at, data }: reopening a list within 45 min sends no new searches
+
+async function paged(opts, fresh) {
+  const hit = listCache.get(opts.queries);
+  if (!fresh && hit && Date.now() - hit.at < 45 * 60e3) return hit.data;
+  if (botPaused()) throw new Error('متوقف مؤقتًا لأن يوتيوب طلب التحقق من أنك لست روبوتاً — حاول بعد نصف ساعة');
+  const data = await pagedFresh(opts);
+  if (data.items.length) listCache.set(opts.queries, { at: Date.now(), data });
+  return data;
+}
+
+async function pagedFresh(opts) {
   const next = feed(opts);
   let items = await next();
   while (items && !items.length) items = await next();
@@ -204,27 +216,27 @@ async function paged(opts) {
 }
 
 /** استكشف العالم: Europe, the Americas, Russia, Korea — no South Asia / Philippines, no adult content. */
-export const exploreWorld = () => paged({ kind: 'world', queries: WORLD_EXPLORE, perQuery: 14, sort: 'relevance', perChannel: 1, rule: RULES.world, excludePersonal: true });
+export const exploreWorld = (fresh) => paged({ kind: 'world', queries: WORLD_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.world, excludePersonal: true }, fresh);
 /** استكشف العرب: every Arab country, Arabic content only. */
-export const exploreArab = () => paged({ kind: 'arab', queries: ARAB_EXPLORE, perQuery: 14, sort: 'relevance', perChannel: 1, rule: RULES.arab, excludePersonal: true });
+export const exploreArab = (fresh) => paged({ kind: 'arab', queries: ARAB_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.arab, excludePersonal: true }, fresh);
 /** تريند العالم: most-watched uploads worldwide (YouTube retired its Trending page in 2025). */
-export const trendWorld = () => paged({ kind: 'world', queries: WORLD_TREND, perQuery: 18, sort: 'views', perChannel: 2, rule: RULES.worldTrend });
+export const trendWorld = (fresh) => paged({ kind: 'world', queries: WORLD_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.worldTrend }, fresh);
 /** تريند الأغاني العالمي: most-watched songs worldwide right now. */
-export const trendMusic = () => paged({ kind: 'world', queries: MUSIC_TREND, perQuery: 18, sort: 'views', perChannel: 2, rule: RULES.worldTrend });
+export const trendMusic = (fresh) => paged({ kind: 'world', queries: MUSIC_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.worldTrend }, fresh);
 /** استكشف السعودية / الترند السعودي: Saudi YouTube (region SA), Saudi subjects, other countries filtered out. */
-export const exploreSaudi = () => paged({ kind: 'gl:SA', queries: SAUDI_EXPLORE, perQuery: 14, sort: 'relevance', perChannel: 1, rule: RULES.saudi, excludePersonal: true });
-export const trendSaudi = () => paged({ kind: 'gl:SA', queries: SAUDI_TREND, perQuery: 16, sort: 'views', perChannel: 2, rule: RULES.saudi });
+export const exploreSaudi = (fresh) => paged({ kind: 'gl:SA', queries: SAUDI_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.saudi, excludePersonal: true }, fresh);
+export const trendSaudi = (fresh) => paged({ kind: 'gl:SA', queries: SAUDI_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.saudi }, fresh);
 /** استكشف الخليج / ترند الخليج: the six GCC countries, each search run in one of their own YouTube regions. */
-export const exploreGulf = () => paged({ kind: GULF_SESSIONS, queries: GULF_EXPLORE, perQuery: 14, sort: 'relevance', perChannel: 1, rule: RULES.gulf, excludePersonal: true });
-export const trendGulf = () => paged({ kind: GULF_SESSIONS, queries: GULF_TREND, perQuery: 18, sort: 'views', perChannel: 2, rule: RULES.gulf });
+export const exploreGulf = (fresh) => paged({ kind: GULF_SESSIONS, queries: GULF_EXPLORE, perQuery: 6, sort: 'relevance', perChannel: 1, rule: RULES.gulf, excludePersonal: true }, fresh);
+export const trendGulf = (fresh) => paged({ kind: GULF_SESSIONS, queries: GULF_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.gulf }, fresh);
 /** الترند العربي: most-watched Arabic uploads. */
-export const trendArab = () => paged({ kind: 'arab', queries: ARAB_TREND, perQuery: 18, sort: 'views', perChannel: 2, rule: RULES.arab });
+export const trendArab = (fresh) => paged({ kind: 'arab', queries: ARAB_TREND, perQuery: 8, sort: 'views', perChannel: 2, rule: RULES.arab }, fresh);
 
 /** News / Gaming: YouTube's topic page plus this week's uploads, ONE list sorted by date, newest first. */
 export async function topicByDate(key) {
   const extra = {
-    news: ['أخبار', 'عاجل', 'نشرة الأخبار', 'آخر الأخبار', 'news today', 'breaking news'],
-    gaming: ['gameplay', 'ألعاب فيديو', 'تختيم', 'gaming news', "let's play", 'بث ألعاب']
+    news: ['أخبار', 'عاجل', 'news today'],
+    gaming: ['gameplay', 'ألعاب فيديو', 'تختيم']
   }[key] || [];
   const [topic, ...found] = await Promise.all([
     yt.topic(key).catch((e) => { console.warn('[topic]', key, e?.message); return { items: [] }; }),

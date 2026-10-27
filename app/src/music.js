@@ -2,7 +2,7 @@
 // the newest album, all in ONE list sorted by release time, newest first. Singers = a fixed list of well-known
 // names + channels found through this week's new songs. Exact times come from RSS (channel uploads and album
 // playlists).
-import { yt, itemAge, relTime } from './yt.js';
+import { yt, itemAge, relTime, searchGate, botPaused } from './yt.js';
 import { extract } from './extract.js';
 import { isAdult } from './discover.js';
 
@@ -38,8 +38,13 @@ async function pool(items, limit, fn) {
 }
 
 async function search(query, sp) {
-  return extract(await yt.raw('/search', { query, params: sp, client: 'WEB' }), { noShorts: true }).items;
+  if (botPaused()) return [];
+  return extract(await searchGate(() => yt.raw('/search', { query, params: sp, client: 'WEB' })), { noShorts: true }).items;
 }
+
+// newest album per singer, kept on the TV for 12 hours (album lookups are the heaviest part of the page)
+function albumCache() { try { return JSON.parse(localStorage.getItem('ytlg.albums') || '{}'); } catch { return {}; } }
+function saveAlbums(c) { try { localStorage.setItem('ytlg.albums', JSON.stringify(c)); } catch { /* storage unavailable */ } }
 
 // singer name -> channel id, kept on the TV for 30 days
 function idCache() { try { return JSON.parse(localStorage.getItem('ytlg.artistIds') || '{}'); } catch { return {}; } }
@@ -120,7 +125,18 @@ export async function musicPage(kind, { fresh } = {}) {
   const list = [...channels.values()];
   const [songs, albums] = await Promise.all([
     pool(list, 6, newestSong),
-    pool(fixed, 4, (c) => newestAlbum(c, cfg.albumWord)) // albums: named singers (label channels have no albums of their own)
+    (async () => { // albums: named singers (label channels have no albums of their own), 12-hour cache
+      const ac = albumCache();
+      const r = await pool(fixed, 2, async (c) => {
+        const hit = ac[c.channelId];
+        if (!fresh && hit && Date.now() - hit.at < 12 * 3600e3) return hit.album && { ...hit.album, age: itemAge(hit.album), meta: hit.album.meta.replace(/منذ .*$/, relTime(itemAge(hit.album))) };
+        const album = await newestAlbum(c, cfg.albumWord);
+        ac[c.channelId] = { at: Date.now(), album };
+        return album;
+      });
+      saveAlbums(ac);
+      return r;
+    })()
   ]);
   const out = [...songs, ...albums].filter(Boolean);
   out.sort((a, b) => a.age - b.age);

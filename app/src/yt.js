@@ -50,6 +50,28 @@ export function relTime(sec) {
   return 'الآن';
 }
 
+/**
+ * Gate for YouTube searches made by the discovery / music pages: at most 2 at a time and ~0.4 s apart, so the
+ * TV never fires dozens of searches at once (YouTube treats bursts like that as a bot and starts asking the
+ * whole connection to sign in).
+ */
+export const searchGate = (() => {
+  let active = 0; let last = 0; const queue = [];
+  const pump = () => {
+    if (active >= 2 || !queue.length) return;
+    const wait = Math.max(0, last + 400 - Date.now());
+    if (wait) { setTimeout(pump, wait); return; }
+    const { fn, ok, bad } = queue.shift();
+    active++; last = Date.now();
+    fn().then(ok, bad).finally(() => { active--; pump(); });
+    pump();
+  };
+  return (fn) => new Promise((ok, bad) => { queue.push({ fn, ok, bad }); pump(); });
+})();
+
+/** true while YouTube is asking this connection to prove it is not a bot (heavy pages pause for 30 min). */
+export const botPaused = () => Date.now() - (yt.botCheckAt || 0) < 30 * 60e3;
+
 const HOME_TOPICS = ['music', 'gaming', 'news', 'sports'].map((k) => TOPICS[k]);
 
 class YT {

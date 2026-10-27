@@ -15,6 +15,7 @@ import { h, toast, fmtTime, esc } from './dom.js';
 import { ICON } from './icons.js';
 
 const CLIENTS = ['VISIONOS', 'TV', 'WEB_EMBEDDED', 'IOS', 'MWEB'];
+const BOT_CHECK = /روبوت|not a bot|confirm you|sign in to confirm/i;
 export const LANGS = [['ar', 'العربية'], ['en', 'English'], ['fr', 'Français'], ['tr', 'Türkçe'], ['ur', 'اردو'], ['id', 'Indonesia'], ['es', 'Español'], ['de', 'Deutsch']];
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
 
@@ -297,6 +298,11 @@ export class Player {
     await yt.ensurePlayer();
     const tube = yt.tube;
     let lastReason = '';
+    // content-bound PoToken (BotGuard attestation for this video): without it YouTube answers
+    // "Sign in to confirm you're not a bot" far more often. Don't wait more than 4 s for it.
+    const poToken = await Promise.race([botguard.mint(videoId).catch(() => undefined), new Promise((r) => setTimeout(r, 4000))]);
+    if (!poToken) console.warn('[player] no PoToken for this request');
+    let botChecks = 0;
     for (const client of only ? [only] : CLIENTS) {
       try {
         const resp = await tube.actions.execute('/player', {
@@ -304,6 +310,7 @@ export class Player {
           client,
           contentCheckOk: true,
           racyCheckOk: true,
+          ...(poToken ? { serviceIntegrityDimensions: { poToken } } : {}),
           playbackContext: {
             contentPlaybackContext: { signatureTimestamp: tube.session.player?.signature_timestamp },
             ...(reloadCtx ? { reloadPlaybackContext: reloadCtx } : {})
@@ -319,10 +326,15 @@ export class Player {
         }
         lastReason = info.playability_status?.reason || st || 'unknown';
         console.warn('[player]', client, lastReason);
+        // bot check: every further request from this connection makes it worse — stop after two clients
+        if (BOT_CHECK.test(lastReason)) { yt.botCheckAt = Date.now(); if (++botChecks >= 2) break; }
       } catch (e) {
         lastReason = e?.message || String(e);
         console.warn('[player]', client, 'failed', e);
       }
+    }
+    if (BOT_CHECK.test(lastReason)) {
+      throw new Error('يوتيوب طلب التحقق من أنك لست روبوتاً. سجّل الدخول من صفحة الحساب، أو انتظر نصف ساعة ثم أعد المحاولة');
     }
     throw new Error(lastReason || 'لا يوجد بث');
   }

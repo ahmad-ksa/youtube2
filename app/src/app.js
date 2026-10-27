@@ -233,8 +233,11 @@ export class App {
           exploreGulf: ['استكشف الخليج', 'السعودية والإمارات والكويت وقطر والبحرين وعُمان', exploreGulf],
           trendGulf: ['ترند الخليج', 'الأكثر مشاهدة في دول الخليج الآن', trendGulf]
         }[id];
-        this.open({ title: P[0], head: `<h1>${P[0]}</h1><div class="head-note">${P[1]} — من الأحدث إلى الأقدم</div>`,
-          load: () => P[2](), mode: 'grid', emptyText: 'تعذّر جلب الفيديوهات، جرّب التحديث' });
+        const pg = { title: P[0], head: `<h1>${P[0]}</h1><div class="head-note">${P[1]} — من الأحدث إلى الأقدم</div>`,
+          mode: 'grid', emptyText: 'تعذّر جلب الفيديوهات، جرّب التحديث' };
+        // first open may come from the 45-min cache; the sidebar refresh button asks for fresh results
+        pg.load = () => { const fresh = pg.loaded; pg.loaded = true; return P[2](fresh); };
+        this.open(pg);
         break;
       }
       case 'arabMusic': case 'worldMusic': {
