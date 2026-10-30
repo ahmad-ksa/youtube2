@@ -1,0 +1,14 @@
+{
+  "id": "youtube.leanback.v4",
+  "version": "1.1.16",
+  "type": "web",
+  "title": "YouTube LG",
+  "appDescription": "مشغل يوتيوب بأعلى جودة بدون إعلانات (مثل SmartTube)",
+  "iconUri": "https://raw.githubusercontent.com/ahmad-ksa/youtube2/repo/icon.png",
+  "sourceUrl": "https://github.com/ahmad-ksa/youtube2",
+  "rootRequired": false,
+  "ipkUrl": "https://github.com/ahmad-ksa/youtube2/releases/download/v1.1.16/youtube.leanback.v4_1.1.16_all.ipk",
+  "ipkHash": {
+    "sha256": "95ab6a6190482196fe4ad8267e80be3cd09bf283d5b947c0b18104ece430e637"
+  }
+}
